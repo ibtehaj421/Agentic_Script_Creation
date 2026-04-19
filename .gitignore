@@ -1,3 +1,9 @@
 __pycache__
 .env
 Assignment4.pdf
+
+phase2/Wav2Lip
+phase2/roop
+phase2/kokoro.onnx
+phase2/voices-v1.0.bin
+phase2/outputs

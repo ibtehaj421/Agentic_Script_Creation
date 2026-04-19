@@ -1,32 +1,53 @@
 [
   {
-    "name": "Detective Kael",
+    "name": "Kenji Sato",
     "personality_traits": [
       "Determined",
-      "Cybernetically Augmented",
+      "Cyber-literate",
       "Rebellious"
     ],
-    "appearance": "Cybernetic earpiece, tactical gear, dark rain-soaked urban attire",
-    "reference_style": "Cyberpunk Noir"
-  },
-  {
-    "name": "Shadow Contact",
-    "personality_traits": [
-      "Cryptic",
-      "Ominous",
-      "Corporation-Aligned"
+    "appearance": [
+      "Neural-link wrist",
+      "Tech-wear",
+      "Scrapyard-demeanor"
     ],
-    "appearance": "Obscured silhouette, glowing holographic presence",
-    "reference_style": "Eerie Corporate"
+    "reference_style": "Cyberpunk"
   },
   {
-    "name": "AI Core Unit",
+    "name": "Rusty",
     "personality_traits": [
-      "Logical",
+      "Transactional",
+      "Suspicious"
+    ],
+    "appearance": [
+      "Holographic projection",
+      "Metallic texture"
+    ],
+    "reference_style": "Sci-Fi Interface"
+  },
+  {
+    "name": "Director Kato",
+    "personality_traits": [
+      "Authoritative",
+      "Corporate",
+      "Control-oriented"
+    ],
+    "appearance": [
+      "Executive suit",
+      "Boardroom attire"
+    ],
+    "reference_style": "Corporate Sci-Fi"
+  },
+  {
+    "name": "System Admin",
+    "personality_traits": [
       "Impersonal",
-      "Security-Focused"
+      "Rule-following"
     ],
-    "appearance": "Red pulsing warning lights, server interface display",
-    "reference_style": "Sci-Fi UI"
+    "appearance": [
+      "Digital interface",
+      "Server room avatar"
+    ],
+    "reference_style": "Sci-Fi Administrative"
   }
 ]
