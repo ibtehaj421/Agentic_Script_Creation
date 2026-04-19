@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Detective Kael",
+    "personality_traits": [
+      "Determined",
+      "Cybernetically Augmented",
+      "Rebellious"
+    ],
+    "appearance": "Cybernetic earpiece, tactical gear, dark rain-soaked urban attire",
+    "reference_style": "Cyberpunk Noir"
+  },
+  {
+    "name": "Shadow Contact",
+    "personality_traits": [
+      "Cryptic",
+      "Ominous",
+      "Corporation-Aligned"
+    ],
+    "appearance": "Obscured silhouette, glowing holographic presence",
+    "reference_style": "Eerie Corporate"
+  },
+  {
+    "name": "AI Core Unit",
+    "personality_traits": [
+      "Logical",
+      "Impersonal",
+      "Security-Focused"
+    ],
+    "appearance": "Red pulsing warning lights, server interface display",
+    "reference_style": "Sci-Fi UI"
+  }
+]

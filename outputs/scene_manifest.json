@@ -1,0 +1,66 @@
+{
+  "scenes": [
+    {
+      "scene_id": 1,
+      "location": "Neo-Tokyo, Neon Alleyway",
+      "characters": [
+        "Detective Kael",
+        "Shadow Contact"
+      ],
+      "dialogue": [
+        {
+          "speaker": "Detective Kael",
+          "line": "The bio-signature is corrupted. Why?",
+          "visual_cue": "Rain streaks down the wet pavement."
+        },
+        {
+          "speaker": "Shadow Contact",
+          "line": "Because the corporation owns the rain.",
+          "visual_cue": "A holographic message flickers above."
+        }
+      ],
+      "action": "Kael adjusts his cybernetic earpiece while stepping through puddles."
+    },
+    {
+      "scene_id": 2,
+      "location": "Omicron Corp Server Core",
+      "characters": [
+        "Detective Kael",
+        "AI Core Unit"
+      ],
+      "dialogue": [
+        {
+          "speaker": "AI Core Unit",
+          "line": "Access denied. Protocol is secure.",
+          "visual_cue": "Red warning lights pulse rapidly."
+        },
+        {
+          "speaker": "Detective Kael",
+          "line": "I don't need protocol. I need truth.",
+          "visual_cue": "Kael hacks into the central console."
+        }
+      ],
+      "action": "Kael uploads a virus code into the mainframe system."
+    },
+    {
+      "scene_id": 3,
+      "location": "Tokyo Skyline Bridge",
+      "characters": [
+        "Detective Kael"
+      ],
+      "dialogue": [
+        {
+          "speaker": "Detective Kael",
+          "line": "They thought they could control the city.",
+          "visual_cue": "Night rain falls heavily."
+        },
+        {
+          "speaker": "Detective Kael",
+          "line": "But the network remembers everything.",
+          "visual_cue": "Smoke clears from the burning drone."
+        }
+      ],
+      "action": "Kael watches the lights of Neo-Tokyo fade into the distance."
+    }
+  ]
+}
