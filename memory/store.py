@@ -1,24 +1,17 @@
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-from contextlib import asynccontextmanager
-import sys, os
+"""Thin accessor to the shared ChromaDB used as the stateful memory layer.
 
-def _server_params(filename: str) -> StdioServerParameters:
-    return StdioServerParameters(
-        command=sys.executable,
-        args=[os.path.join(os.path.dirname(os.path.dirname(__file__)), "mcp-servers", filename)]
-    )
+Direct writes from the agents go through the MCP `commit_memory` /
+`query_memory` tools; this module is kept for convenience and tests.
+"""
+from __future__ import annotations
 
-@asynccontextmanager
-async def script_session():
-    async with stdio_client(_server_params("script_tools_server.py")) as (r, w):
-        async with ClientSession(r, w) as session:
-            await session.initialize()
-            yield session
+from functools import lru_cache
 
-@asynccontextmanager
-async def character_session():
-    async with stdio_client(_server_params("character_tools_server.py")) as (r, w):
-        async with ClientSession(r, w) as session:
-            await session.initialize()
-            yield session
+from config import MEMORY_DIR
+
+
+@lru_cache(maxsize=1)
+def collection():
+    import chromadb
+    client = chromadb.PersistentClient(path=str(MEMORY_DIR))
+    return client.get_or_create_collection("writers_room")

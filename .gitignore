@@ -1,9 +1,22 @@
-__pycache__
+__pycache__/
+*.pyc
 .env
-Assignment4.pdf
+.DS_Store
 
-phase2/Wav2Lip
-phase2/roop
+# Phase 1 runtime artefacts
+memory/chroma/
+outputs/images/
+outputs/run_log.json
+
+# Phase 2 assignment PDF stays outside the repo
+phase2/Assignment4.pdf
+
+# Heavy third-party models nobody should commit
+phase2/Wav2Lip/
+phase2/roop/
 phase2/kokoro.onnx
 phase2/voices-v1.0.bin
-phase2/outputs
+
+# Phase 2 runtime artefacts
+phase2/outputs/
+phase2/memory/checkpoints/

@@ -1,31 +1,38 @@
-import json
-import re
-from memory.store import script_session
+"""Scriptwriter Agent.
 
-async def scriptwriter_agent(state: dict) -> dict:
-    prompt     = state["raw_input"]
+Role:   Transform abstract prompts into structured, production-ready scripts.
+Tools:  generate_script_segment, commit_memory (discovered via MCP).
+
+Reasoning loop:
+    1. Read the user prompt from shared state.
+    2. Invoke generate_script_segment to decompose it into scenes.
+    3. Persist the draft via commit_memory for downstream agents.
+"""
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from .mcp_client import call_tool
+
+
+async def scriptwriter_agent(state: dict[str, Any]) -> dict[str, Any]:
+    prompt = state.get("raw_input", "")
     num_scenes = state.get("num_scenes", 3)
 
-    async with script_session() as session:
-        tools = await session.list_tools()
-        tool_names = [t.name for t in tools.tools]
-        assert "generate_script_segment" in tool_names
+    raw = await call_tool(
+        "generate_script_segment", prompt=prompt, num_scenes=num_scenes
+    )
+    script = json.loads(raw)
 
-        result = await session.call_tool(
-            "generate_script_segment",
-            {"prompt": prompt, "num_scenes": num_scenes}
-        )
-        raw = result.content[0].text
-        raw = re.sub(r"```(?:json)?", "", raw).strip()
+    await call_tool(
+        "commit_memory",
+        key="script:latest",
+        content=json.dumps(script),
+        kind="script",
+    )
 
-        if not raw:
-            raise ValueError("LLM returned empty response")
-
-        script = json.loads(raw)
-
-        await session.call_tool(
-            "commit_memory",
-            {"key": "script:latest", "data": script}
-        )
-
-    return {"script": script, "status": "script_ready"}
+    log = state.get("log", []) + [
+        f"[scriptwriter] {len(script.get('scenes', []))} scenes"
+    ]
+    return {"script": script, "status": "script_drafted", "log": log}

@@ -1,119 +1,133 @@
+"""LangGraph StateGraph wiring for Phase 1 — THE WRITER'S ROOM.
+
+Supervisor-Worker hierarchical model; the supervisor is implicit in the
+routing functions below.
+"""
+from __future__ import annotations
+
 import json
-from typing import TypedDict, Literal
-from langgraph.graph import StateGraph, END
+from pathlib import Path
+from typing import Any
+
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, StateGraph
 
-from agents.scriptwriter import scriptwriter_agent
-from agents.validator import validator_agent
-from agents.hitl import hitl_agent
 from agents.character_designer import character_designer_agent
+from agents.hitl import hitl_agent
 from agents.image_synthesizer import image_synthesizer_agent
+from agents.mcp_client import call_tool
+from agents.scriptwriter import scriptwriter_agent
+from agents.state import PipelineState
+from agents.validator import validator_agent
+from config import OUTPUT_DIR
 
-# ── State ────────────────────────────────────────────────────────────────────
 
-class PipelineState(TypedDict):
-    input_mode:        Literal["manual", "auto"]
-    raw_input:         str
-    num_scenes:        int
-    script:            dict
-    characters:        list
-    images:            list
-    validation_status: str
-    hitl_approved:     bool
-    errors:            list
-    status:            str
+async def mode_selector_node(state: PipelineState) -> dict[str, Any]:
+    mode = state.get("input_mode", "auto")
+    log = state.get("log", []) + [f"[mode_selector] mode={mode}"]
+    return {"status": f"mode={mode}", "log": log}
 
-# ── Node wrappers ─────────────────────────────────────────────────────────────
 
-async def mode_selector_node(state: PipelineState) -> dict:
-    # nothing to compute — routing happens in the conditional edge
-    return {}
-
-async def validator_node(state: PipelineState) -> dict:
+async def validator_node(state: PipelineState) -> dict[str, Any]:
     return await validator_agent(state)
 
-async def scriptwriter_node(state: PipelineState) -> dict:
+
+async def scriptwriter_node(state: PipelineState) -> dict[str, Any]:
     return await scriptwriter_agent(state)
 
-async def hitl_node(state: PipelineState) -> dict:
+
+async def hitl_node(state: PipelineState) -> dict[str, Any]:
     return await hitl_agent(state)
 
-async def character_node(state: PipelineState) -> dict:
+
+async def character_node(state: PipelineState) -> dict[str, Any]:
     return await character_designer_agent(state)
 
-async def image_node(state: PipelineState) -> dict:
+
+async def image_node(state: PipelineState) -> dict[str, Any]:
     return await image_synthesizer_agent(state)
 
-async def memory_commit_node(state: PipelineState) -> dict:
-    # write final outputs to disk
-    import os
-    os.makedirs("outputs", exist_ok=True)
 
-    with open("outputs/scene_manifest.json", "w") as f:
-        json.dump(state["script"], f, indent=2)
+async def memory_commit_node(state: PipelineState) -> dict[str, Any]:
+    """Persist final artefacts to disk and to the shared ChromaDB."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    with open("outputs/character_db.json", "w") as f:
-        json.dump(state["characters"], f, indent=2)
+    script = state.get("script", {})
+    characters = state.get("characters", [])
 
-    return {"status": "done"}
+    (OUTPUT_DIR / "scene_manifest.json").write_text(json.dumps(script, indent=2))
+    (OUTPUT_DIR / "character_db.json").write_text(json.dumps(characters, indent=2))
+    (OUTPUT_DIR / "run_log.json").write_text(
+        json.dumps(
+            {
+                "status": state.get("status"),
+                "log": state.get("log", []),
+                "images": state.get("images", []),
+                "errors": state.get("errors", []),
+            },
+            indent=2,
+        )
+    )
 
-# ── Routing functions ─────────────────────────────────────────────────────────
+    await call_tool(
+        "commit_memory",
+        key="run:final",
+        content=json.dumps(
+            {
+                "script": script,
+                "characters": characters,
+                "images": state.get("images", []),
+            }
+        ),
+        kind="run",
+    )
+
+    log = state.get("log", []) + ["[memory_commit] run persisted"]
+    return {"status": "done", "log": log}
+
 
 def route_by_mode(state: PipelineState) -> str:
-    return state["input_mode"]          # "manual" | "auto"
+    return state.get("input_mode", "auto")
+
 
 def route_by_validation(state: PipelineState) -> str:
-    return state["validation_status"]   # "passed" | "failed"
+    return state.get("validation_status", "failed")
+
 
 def route_by_hitl(state: PipelineState) -> str:
-    return "approved" if state["hitl_approved"] else "rejected"
+    return "approved" if state.get("hitl_approved") else "rejected"
 
-# ── Graph assembly ────────────────────────────────────────────────────────────
 
-def build_graph():
-    graph = StateGraph(PipelineState)
+def build_graph(interrupt_hitl: bool = True):
+    g = StateGraph(PipelineState)
 
-    # nodes
-    graph.add_node("mode_selector",   mode_selector_node)
-    graph.add_node("validator",       validator_node)
-    graph.add_node("scriptwriter",    scriptwriter_node)
-    graph.add_node("hitl",            hitl_node)
-    graph.add_node("character",       character_node)
-    graph.add_node("image",           image_node)
-    graph.add_node("memory_commit",   memory_commit_node)
+    g.add_node("mode_selector", mode_selector_node)
+    g.add_node("validator", validator_node)
+    g.add_node("scriptwriter", scriptwriter_node)
+    g.add_node("hitl", hitl_node)
+    g.add_node("character", character_node)
+    g.add_node("image", image_node)
+    g.add_node("memory_commit", memory_commit_node)
 
-    # entry
-    graph.set_entry_point("mode_selector")
-
-    # mode_selector → validator or scriptwriter
-    graph.add_conditional_edges("mode_selector", route_by_mode, {
-        "manual": "validator",
-        "auto":   "scriptwriter"
-    })
-
-    # validator → hitl or END (on failure)
-    graph.add_conditional_edges("validator", route_by_validation, {
-        "passed": "hitl",
-        "failed": END
-    })
-
-    # scriptwriter always goes to hitl
-    graph.add_edge("scriptwriter", "hitl")
-
-    # hitl → character or END (on rejection)
-    graph.add_conditional_edges("hitl", route_by_hitl, {
-        "approved": "character",
-        "rejected": END
-    })
-
-    # linear from character onwards
-    graph.add_edge("character",     "image")
-    graph.add_edge("image",         "memory_commit")
-    graph.add_edge("memory_commit", END)
-
-    # MemorySaver enables interrupt/resume for HITL
-    checkpointer = MemorySaver()
-    return graph.compile(
-        checkpointer=checkpointer,
-        interrupt_before=["hitl"]      # pause before hitl_node executes
+    g.set_entry_point("mode_selector")
+    g.add_conditional_edges(
+        "mode_selector",
+        route_by_mode,
+        {"manual": "validator", "auto": "scriptwriter"},
     )
+    g.add_conditional_edges(
+        "validator",
+        route_by_validation,
+        {"passed": "hitl", "failed": END},
+    )
+    g.add_edge("scriptwriter", "hitl")
+    g.add_conditional_edges(
+        "hitl",
+        route_by_hitl,
+        {"approved": "character", "rejected": END},
+    )
+    g.add_edge("character", "image")
+    g.add_edge("image", "memory_commit")
+    g.add_edge("memory_commit", END)
+
+    return g.compile(checkpointer=MemorySaver())

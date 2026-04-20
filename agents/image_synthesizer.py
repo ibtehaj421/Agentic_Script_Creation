@@ -1,156 +1,26 @@
-# # import httpx
-# # import base64
-# # import os
-# # import json
-# # from pathlib import Path
-# # import asyncio
+"""Image Synthesizer Agent.
 
-# # HF_TOKEN  = os.getenv("HF_TOKEN")
-# # HF_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1"
-# # OUT_DIR   = Path("outputs/images")
+Role:   Generates reference images for every character record.
+Tool:   generate_character_image (discovered via MCP — backed by
+        Pollinations, a free and keyless diffusion endpoint).
+"""
+from __future__ import annotations
 
-# # async def image_synthesizer_agent(state: dict) -> dict:
-# #     OUT_DIR.mkdir(parents=True, exist_ok=True)
-# #     characters = state["characters"]
-# #     image_paths = []
+from typing import Any
 
-# #     async with httpx.AsyncClient(timeout=60) as client:
-# #         for char in characters:
-# #             prompt = f"Character portrait: {char['appearance']}, style: {char['reference_style']}, cinematic lighting"
+from .mcp_client import call_tool
 
-            
-# #             for attempt in range(4):
-# #                 r = await client.post(
-# #                         HF_URL,
-# #                         headers={"Authorization": f"Bearer {HF_TOKEN}"},
-# #                         json={"inputs": prompt}
-# #                     )                                  
-# #                 if r.status_code == 200:
-# #                     break
-# #                 await asyncio.sleep(20)
 
-# #             if r.status_code == 200:
-# #                 path = OUT_DIR / f"{char['name'].replace(' ', '_')}.png"
-# #                 path.write_bytes(r.content)
-# #                 image_paths.append(str(path))
-# #             else:
-# #                 # non-blocking — log and continue
-# #                 print(f"Image gen failed for {char['name']}: {r.status_code}")
+async def image_synthesizer_agent(state: dict[str, Any]) -> dict[str, Any]:
+    images: list[dict[str, Any]] = []
+    for c in state.get("characters", []):
+        path = await call_tool(
+            "generate_character_image",
+            name=c.get("name", "unknown"),
+            appearance=str(c.get("appearance", "")),
+            style=c.get("reference_style", "cinematic"),
+        )
+        images.append({"character": c.get("name"), "path": path})
 
-# #     return {"images": image_paths, "status": "images_ready"}
-# import httpx
-# import os
-# from pathlib import Path
-# from PIL import Image, ImageDraw
-
-# HF_TOKEN = os.getenv("HF_TOKEN")
-# OUT_DIR  = Path("outputs/images")
-
-# HF_MODELS = [
-#     "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1",
-#     "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
-# ]
-
-# async def image_synthesizer_agent(state: dict) -> dict:
-#     OUT_DIR.mkdir(parents=True, exist_ok=True)
-#     characters = state["characters"]
-#     image_paths = []
-
-#     async with httpx.AsyncClient(timeout=60) as client:
-#         for char in characters:
-#             prompt = f"Character portrait: {char['appearance']}, style: {char['reference_style']}, cinematic lighting"
-#             path   = OUT_DIR / f"{char['name'].replace(' ', '_')}.png"
-#             saved  = False
-
-#             for url in HF_MODELS:
-#                 r = await client.post(
-#                     url,
-#                     headers={"Authorization": f"Bearer {HF_TOKEN}"},
-#                     json={"inputs": prompt}
-#                 )
-#                 if r.status_code == 200:
-#                     path.write_bytes(r.content)
-#                     image_paths.append(str(path))
-#                     saved = True
-#                     print(f"  ✓ image saved for {char['name']}")
-#                     break
-
-#             if not saved:
-#                 # placeholder — pipeline always completes
-#                 img  = Image.new("RGB", (512, 512), color=(20, 20, 40))
-#                 draw = ImageDraw.Draw(img)
-#                 draw.text((20, 20),  f"Name:   {char['name']}",                     fill=(255, 255, 255))
-#                 draw.text((20, 60),  f"Look:   {char['appearance'][:60]}",           fill=(200, 200, 200))
-#                 draw.text((20, 100), f"Style:  {char['reference_style'][:60]}",      fill=(200, 200, 200))
-#                 draw.text((20, 140), f"Traits: {', '.join(char.get('personality_traits', []))[:60]}", fill=(180, 180, 220))
-#                 img.save(path)
-#                 image_paths.append(str(path))
-#                 print(f"  ⚠ placeholder image created for {char['name']}")
-
-#     return {"images": image_paths, "status": "images_ready"}
-import httpx
-import urllib.parse
-import asyncio
-from pathlib import Path
-from PIL import Image, ImageDraw
-
-OUT_DIR = Path("outputs/images")
-
-async def image_synthesizer_agent(state: dict) -> dict:
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    characters = state.get("characters", [])
-    image_paths = []
-
-    base_url = "https://image.pollinations.ai/prompt/"
-
-    async with httpx.AsyncClient(timeout=60) as client:
-        for char in characters:
-            traits = ", ".join(char.get("personality_traits", []))
-            prompt_text = f"Character portrait: {char.get('appearance', '')}, style: {char.get('reference_style', '')}, traits: {traits}, cinematic lighting, high quality"
-            encoded_prompt = urllib.parse.quote(prompt_text)
-            url = f"{base_url}{encoded_prompt}?width=512&height=512&nologo=true"
-            
-            path = OUT_DIR / f"{char['name'].replace(' ', '_')}.png"
-            saved = False
-
-            # 3 attempts with exponential backoff for rate limits or drops
-            for attempt in range(3):
-                try:
-                    r = await client.get(url)
-                    if r.status_code == 200:
-                        path.write_bytes(r.content)
-                        image_paths.append(str(path))
-                        saved = True
-                        print(f"  ✓ Image saved for {char['name']}")
-                        break  # Success, break out of retry loop
-                        
-                    elif r.status_code == 429:
-                        wait_time = 2 ** attempt
-                        print(f"  ⚠ Rate limited (429) for {char['name']}. Retrying in {wait_time}s...")
-                        await asyncio.sleep(wait_time)
-                        
-                    else:
-                        print(f"  ✗ API returned {r.status_code} for {char['name']}")
-                        break  # Other errors (like 400s), don't blindly retry
-                        
-                except Exception as e:
-                    print(f"  ⚠ Request failed for {char['name']}: {e}. Retrying...")
-                    await asyncio.sleep(2)
-
-            # Fallback block if all retries fail
-            if not saved:
-                img  = Image.new("RGB", (512, 512), color=(20, 20, 40))
-                draw = ImageDraw.Draw(img)
-                draw.text((20, 20),  f"Name:   {char['name']}", fill=(255, 255, 255))
-                draw.text((20, 60),  f"Look:   {char.get('appearance', '')[:60]}", fill=(200, 200, 200))
-                draw.text((20, 100), f"Style:  {char.get('reference_style', '')[:60]}", fill=(200, 200, 200))
-                draw.text((20, 140), f"Traits: {traits[:60]}", fill=(180, 180, 220))
-                
-                img.save(path)
-                image_paths.append(str(path))
-                print(f"  ⚠ Placeholder image created for {char['name']}")
-
-            # Polite delay between distinct character requests to prevent hitting the limit
-            await asyncio.sleep(2)
-
-    return {"images": image_paths, "status": "images_ready"}
+    log = state.get("log", []) + [f"[image] {len(images)} renders"]
+    return {"images": images, "status": "images_generated", "log": log}

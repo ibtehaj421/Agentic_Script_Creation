@@ -1,53 +1,98 @@
 [
   {
-    "name": "Kenji Sato",
+    "name": "Detective Kenji",
     "personality_traits": [
-      "Determined",
-      "Cyber-literate",
-      "Rebellious"
+      "determined",
+      "resourceful",
+      "intense"
     ],
-    "appearance": [
-      "Neural-link wrist",
-      "Tech-wear",
-      "Scrapyard-demeanor"
-    ],
-    "reference_style": "Cyberpunk"
+    "appearance": "Detective Kenji stands tall with a rugged, weathered face, short black hair, and a sharp jawline, wearing a long, black trench coat with a neon-blue glow of his cyberdeck visible under the collar, set against the backdrop of a rainy, dystopian Neo-Tokyo streetscape.",
+    "reference_style": "cyberpunk",
+    "stock_refs": [
+      {
+        "id": "stock-detective-kenji-stands-tall-with-a-rugge-1",
+        "url": "stock://detective-kenji-stands-tall-with-a-rugge/1"
+      },
+      {
+        "id": "stock-detective-kenji-stands-tall-with-a-rugge-2",
+        "url": "stock://detective-kenji-stands-tall-with-a-rugge/2"
+      },
+      {
+        "id": "stock-detective-kenji-stands-tall-with-a-rugge-3",
+        "url": "stock://detective-kenji-stands-tall-with-a-rugge/3"
+      }
+    ]
   },
   {
-    "name": "Rusty",
+    "name": "Informant Zara",
     "personality_traits": [
-      "Transactional",
-      "Suspicious"
+      "fearless",
+      "determined",
+      "vulnerable"
     ],
-    "appearance": [
-      "Holographic projection",
-      "Metallic texture"
-    ],
-    "reference_style": "Sci-Fi Interface"
+    "appearance": "Informant Zara has a petite yet athletic build, with short, spiky hair dyed in vibrant, electric blue, and piercing green eyes, wearing a sleek black jumpsuit with built-in flexi-armor, set against the dark, rainy alleyways of Neo-Tokyo.",
+    "reference_style": "sci-fi",
+    "stock_refs": [
+      {
+        "id": "stock-informant-zara-has-a-petite-yet-athletic-1",
+        "url": "stock://informant-zara-has-a-petite-yet-athletic/1"
+      },
+      {
+        "id": "stock-informant-zara-has-a-petite-yet-athletic-2",
+        "url": "stock://informant-zara-has-a-petite-yet-athletic/2"
+      },
+      {
+        "id": "stock-informant-zara-has-a-petite-yet-athletic-3",
+        "url": "stock://informant-zara-has-a-petite-yet-athletic/3"
+      }
+    ]
   },
   {
-    "name": "Director Kato",
+    "name": "Ada",
     "personality_traits": [
-      "Authoritative",
-      "Corporate",
-      "Control-oriented"
+      "intelligent",
+      "efficient",
+      "detached"
     ],
-    "appearance": [
-      "Executive suit",
-      "Boardroom attire"
-    ],
-    "reference_style": "Corporate Sci-Fi"
+    "appearance": "Ada is a holographic AI assistant with a slender, androgynous appearance, short silver hair, and an ethereal glow surrounding her body, wearing a minimalist white jumpsuit with intricate circuit patterns, set against the backdrop of a high-tech laboratory.",
+    "reference_style": "futuristic",
+    "stock_refs": [
+      {
+        "id": "stock-ada-is-a-holographic-ai-assistant-with-a-1",
+        "url": "stock://ada-is-a-holographic-ai-assistant-with-a/1"
+      },
+      {
+        "id": "stock-ada-is-a-holographic-ai-assistant-with-a-2",
+        "url": "stock://ada-is-a-holographic-ai-assistant-with-a/2"
+      },
+      {
+        "id": "stock-ada-is-a-holographic-ai-assistant-with-a-3",
+        "url": "stock://ada-is-a-holographic-ai-assistant-with-a/3"
+      }
+    ]
   },
   {
-    "name": "System Admin",
+    "name": "CEO Ryota Nakamura",
     "personality_traits": [
-      "Impersonal",
-      "Rule-following"
+      "arrogant",
+      "ruthless",
+      "charismatic"
     ],
-    "appearance": [
-      "Digital interface",
-      "Server room avatar"
-    ],
-    "reference_style": "Sci-Fi Administrative"
+    "appearance": "CEO Ryota Nakamura is a tall, imposing figure with a chiseled, angular face, slicked-back black hair, and piercing brown eyes, wearing an expensive, tailored black suit with a crisp white shirt and a black tie, set against the sleek, modern backdrop of his high-rise office.",
+    "reference_style": "corporate",
+    "stock_refs": [
+      {
+        "id": "stock-ceo-ryota-nakamura-is-a-tall-imposing-fi-1",
+        "url": "stock://ceo-ryota-nakamura-is-a-tall-imposing-fi/1"
+      },
+      {
+        "id": "stock-ceo-ryota-nakamura-is-a-tall-imposing-fi-2",
+        "url": "stock://ceo-ryota-nakamura-is-a-tall-imposing-fi/2"
+      },
+      {
+        "id": "stock-ceo-ryota-nakamura-is-a-tall-imposing-fi-3",
+        "url": "stock://ceo-ryota-nakamura-is-a-tall-imposing-fi/3"
+      }
+    ]
   }
 ]
