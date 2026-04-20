@@ -1,57 +1,67 @@
+"""Script Validator Agent.
+
+Role:   Ensures correctness of manually provided scripts.
+Tools:  validate_script, commit_memory (discovered via MCP).
+
+Accepts either:
+    * Free-form screenplay text (SCENE/INT./EXT. headers, SPEAKER: lines), or
+    * A pre-structured JSON manifest with a `scenes` array.
+"""
+from __future__ import annotations
+
 import json
-from memory.store import script_session
+from typing import Any
 
-def _validate_structure(script_text: str) -> tuple[bool, list[str]]:
-    errors = []
-    try:
-        data = json.loads(script_text)
-    except json.JSONDecodeError:
-        return False, ["Invalid JSON"]
+from .mcp_client import call_tool
 
-    scenes = data.get("scenes", [])
+
+def _structured_check(script_obj: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+    errors: list[str] = []
+    scenes = script_obj.get("scenes", [])
     if not scenes:
         errors.append("No scenes found")
+    for i, scene in enumerate(scenes, start=1):
+        for field in ("location", "characters", "dialogue", "action"):
+            if field not in scene:
+                errors.append(f"Scene {i}: missing {field}")
+        for turn in scene.get("dialogue", []):
+            if "speaker" not in turn:
+                errors.append(f"Scene {i}: dialogue missing speaker")
+            if "line" not in turn:
+                errors.append(f"Scene {i}: dialogue missing line")
+    return errors, {"scenes": scenes}
 
-    for i, scene in enumerate(scenes):
-        if "location" not in scene:
-            errors.append(f"Scene {i+1}: missing location")
-        if "characters" not in scene:
-            errors.append(f"Scene {i+1}: missing characters")
-        if "dialogue" not in scene:
-            errors.append(f"Scene {i+1}: missing dialogue")
+
+async def validator_agent(state: dict[str, Any]) -> dict[str, Any]:
+    raw_script = state.get("raw_input", "")
+
+    # Try JSON-structured path first
+    try:
+        parsed = json.loads(raw_script)
+        if isinstance(parsed, dict) and "scenes" in parsed:
+            errors, script = _structured_check(parsed)
+            passed = not errors
         else:
-            for d in scene["dialogue"]:
-                if "speaker" not in d:
-                    errors.append(f"Scene {i+1}: dialogue missing speaker")
-                if "line" not in d:
-                    errors.append(f"Scene {i+1}: dialogue missing line")
-        if "action" not in scene:
-            errors.append(f"Scene {i+1}: missing action")
+            raise ValueError("not a scene manifest")
+    except (json.JSONDecodeError, ValueError):
+        raw = await call_tool("validate_script", script_text=raw_script)
+        result = json.loads(raw)
+        script = {"scenes": result.get("scenes", [])}
+        errors = result.get("errors", [])
+        passed = bool(result.get("ok"))
 
-    return len(errors) == 0, errors
-
-async def validator_agent(state: dict) -> dict:
-    raw_script = state["raw_input"]
-
-    passed, errors = _validate_structure(raw_script)
-
-    if not passed:
-        return {
-            "validation_status": "failed",
-            "errors": errors,
-            "script": {}
-        }
-
-    script = json.loads(raw_script)
-
-    async with script_session() as session:
-        await session.call_tool(
+    if passed:
+        await call_tool(
             "commit_memory",
-            {"key": "script:latest", "data": script}
+            key="script:latest",
+            content=json.dumps(script),
+            kind="script",
         )
 
+    log = state.get("log", []) + [f"[validator] passed={passed}"]
     return {
-        "validation_status": "passed",
-        "script": script,
-        "errors": []
+        "validation_status": "passed" if passed else "failed",
+        "script": script if passed else {},
+        "errors": errors,
+        "log": log,
     }
