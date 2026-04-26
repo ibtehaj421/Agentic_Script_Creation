@@ -1,0 +1,19 @@
+data/outputs/
+data/state.sqlite
+data/state_versions/
+data/temp/
+data/bgm/library/*.mp3
+data/bgm/library/**/*.mp3
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+node_modules/
+frontend/dist/
+frontend/static/assets/
+.env
+.env.local
+.DS_Store
+.vscode/
+.idea/
+Agentic AI Final Project - 2026.pdf
