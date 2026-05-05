@@ -39,6 +39,46 @@ _POLLINATIONS_LOCK = threading.Lock()
 _FAL_LOCK = threading.Lock()
 
 
+# Per-style prompt fragments. The `lead` token goes at the front of the
+# prompt to anchor the diffusion model, the `quality` tail replaces the
+# hardcoded "photorealistic, 8k" tokens that were previously baked into
+# every prompt regardless of selected style. Without this, picking
+# "anime" or "watercolor" had no visible effect because the photoreal
+# tokens dominated the embedding.
+_STYLE_TOKENS = {
+    "cinematic": {
+        "lead": "cinematic film still",
+        "quality": "professional cinematography, anamorphic lens, 35mm film grain, dramatic key lighting, shallow depth of field, color graded",
+    },
+    "photorealistic": {
+        "lead": "hyperrealistic photograph",
+        "quality": "ultra detailed, 8k, sharp focus, professional dslr, natural lighting, photographic realism",
+    },
+    "anime": {
+        "lead": "anime illustration",
+        "quality": "cel-shaded, vibrant flat colors, clean linework, manga aesthetic, studio ghibli inspired, stylized 2d art, no photorealism",
+    },
+    "noir": {
+        "lead": "film noir frame",
+        "quality": "black and white, high contrast chiaroscuro, hard shadows, 1940s detective film, smoky monochrome, expressionist lighting",
+    },
+    "cyberpunk": {
+        "lead": "cyberpunk concept art",
+        "quality": "neon-soaked, holographic signage, rain-slick streets, blade runner aesthetic, magenta and cyan accents, dystopian futurism, volumetric haze",
+    },
+    "watercolor": {
+        "lead": "watercolor painting",
+        "quality": "soft wet-on-wet brush strokes, paper texture, hand-painted illustration, gentle pigment bleed, traditional media, no photorealism",
+    },
+}
+
+
+def _style_fragments(style: str) -> tuple[str, str]:
+    s = (style or "").strip().lower()
+    cfg = _STYLE_TOKENS.get(s, _STYLE_TOKENS["cinematic"])
+    return cfg["lead"], cfg["quality"]
+
+
 def _scene_bg_dir(job_id: str | None) -> Path:
     """Per-job scene-backgrounds dir under VIDEO_DIR."""
     return job_dir(VIDEO_DIR, job_id) / "scene_backgrounds"
@@ -172,10 +212,10 @@ class CharacterPortraitTool(BaseTool):
         if out.exists() and out.stat().st_size > 4_000:
             return str(out)
 
+        lead, quality = _style_fragments(reference_style)
         prompt = (
-            f"{reference_style} portrait of {name}, {appearance}, "
-            f"highly detailed, 8k, centered face, neutral background, professional studio lighting, "
-            f"sharp focus, photorealistic"
+            f"{lead}: portrait of {name}, {appearance}, centered face, "
+            f"neutral background, head-and-shoulders framing, {quality}"
         )
         provider = _fetch_image(prompt, PORTRAIT_SIZE, PORTRAIT_SIZE, out)
         if provider == "placeholder":
@@ -203,8 +243,8 @@ class SceneBackgroundTool(BaseTool):
         # Cache key includes provider so a switch from Pollinations → fal.ai
         # forces a re-fetch (different source resolution and quality).
         provider_tag = "fal" if FAL_KEY else "poll"
-        # v4 = "no people / empty location" prompt change
-        key = hash_short(f"{location}|{visual_cue}|{action}|{mood}|{style}|{provider_tag}|v4")
+        # v5 = style-token rewrite (no hardcoded photorealistic tail)
+        key = hash_short(f"{location}|{visual_cue}|{action}|{mood}|{style}|{provider_tag}|v5")
         bg_dir = _scene_bg_dir(job_id)
         bg_dir.mkdir(parents=True, exist_ok=True)
         out = bg_dir / f"bg_{key}.png"
@@ -214,12 +254,13 @@ class SceneBackgroundTool(BaseTool):
         w, h = BACKGROUND_REQ_WIDTH, BACKGROUND_REQ_HEIGHT
         # "no people, empty location" because the close-up flow handles
         # characters separately via the per-character portraits. If we let
-        # Pollinations populate the wide shot with random people they're
-        # not the actual story characters and the mismatch is jarring.
+        # the model populate the wide shot with random people they're not
+        # the actual story characters and the mismatch is jarring.
+        lead, quality = _style_fragments(style)
         prompt = (
-            f"{style} wide establishing shot of an empty {location}. {visual_cue}. {action}. "
-            f"{mood} mood, atmospheric volumetric lighting, 16:9, photorealistic, ultra detailed, "
-            f"sharp focus, depth of field, 8k, "
+            f"{lead}: wide establishing shot of an empty {location}. "
+            f"{visual_cue}. {action}. {mood} mood. 16:9 framing. "
+            f"{quality}. "
             f"no people, no person, no characters, no figures, "
             f"empty location, deserted setting, "
             f"no text, no watermark, no signature"

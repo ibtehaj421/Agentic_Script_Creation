@@ -17,7 +17,7 @@ from agents.video_agent import (
 from mcp.tool_executor import ToolExecutor
 from shared.constants import VOICE_POOL
 from shared.schemas import PipelineState
-from shared.utils import emit
+from shared.utils import clear_phase_cache, emit
 
 
 def execute_edit(
@@ -44,24 +44,31 @@ def _h_story_rerun(
     parameters: dict | None = None,
     directive: str = "",
 ) -> PipelineState:
-    # Keep the same prompt, regenerate the story. `directive` is the
-    # user's raw edit query (e.g. "make Jack agree with Ava about the
-    # aliens") — passed through to the LLM so the regen actually shapes
-    # the new script around the user's intent.
+    # Wipe story + audio + video caches before regen — without this the
+    # downstream tool caches (TTS wavs, ken-burns/wav2lip MP4s) hash on
+    # speaker+line and would silently return previous-story files even
+    # when the new dialogue lines don't actually match. clear_phase_cache
+    # also resets state.story.characters image_paths and the audio/video
+    # path pointers so handlers rebuild from scratch.
+    clear_phase_cache("story", state)
     state.story.scenes = []
     state.story.characters = []
-    state.audio = state.audio.__class__()
-    state.video.scene_clips = {}
-    state.video.final_mp4 = None
     return run_story_phase(state, job_id=job_id, directive=directive)
 
 
 def _h_audio_rerun(state: PipelineState, job_id: str) -> PipelineState:
+    # Wipe audio + video caches so we actually hit ElevenLabs / edge-tts
+    # again instead of returning the previous WAVs (the TTS hash key is
+    # deterministic on inputs, so without a wipe a rerun is a no-op).
+    clear_phase_cache("audio", state)
     return run_audio_phase(state, job_id=job_id)
 
 
 def _h_video_rerun(state: PipelineState, job_id: str) -> PipelineState:
-    state.video.scene_clips = {}
+    # Wipe video cache (kb_*, w2l_*, mb_*, scene_backgrounds/, _masks/,
+    # scene composites) so backgrounds re-fetch from Pollinations with
+    # fresh seeds and ken-burns / wav2lip / mouth_blend re-encode.
+    clear_phase_cache("video", state)
     return run_video_phase(state, job_id=job_id)
 
 

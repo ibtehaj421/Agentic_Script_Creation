@@ -256,12 +256,13 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [chatLog, setChatLog] = useState([]);
   const wsRef = useRef(null);
-  // Counter that bumps ONLY on user actions (edit / undo / restore). The
-  // <video> element appends `?b=<bust>` to its src and calls .load() when
-  // bust changes, forcing the browser to drop its cached MP4 (which would
-  // otherwise keep playing the old content because the file path is the
-  // same after a re-render). Bumping only on user actions avoids the
-  // initial-load remount loop the previous cache-buster caused.
+  // The <video> element appends `?b=<bust>` to its src and calls .load()
+  // when bust changes, forcing the browser to drop its cached MP4 (path
+  // stays the same across re-renders). The bust value is the active
+  // version number, so any time a new snapshot lands — whether from a UI
+  // edit, CLI run, or external snapshot — the URL changes and the player
+  // reloads. Initial value 0; gets set from the versions list as soon as
+  // the first refresh lands.
   const [videoBust, setVideoBust] = useState(0);
   const finalVideoRef = useRef(null);
 
@@ -300,6 +301,13 @@ function App() {
       if (s) setState(s);
       if (o) setOutputs(o);
       setVersions(v || []);
+      // Sync the cache-buster to the active version so the <video> reloads
+      // whenever the active version changes — including snapshots created
+      // outside the UI (CLI, scripts, programmatic re-renders).
+      const active = (v || []).find((row) => row.is_active);
+      if (active && active.version != null) {
+        setVideoBust((prev) => (prev === active.version ? prev : active.version));
+      }
     } catch (e) {
       console.error(e);
     }

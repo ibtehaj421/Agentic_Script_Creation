@@ -83,11 +83,12 @@ class StoryGeneratorTool(BaseTool):
             "(5) `mood` is one of: tense, urgent, happy, sad, mysterious, action, reflective, "
             "determined, neutral.\n"
         )
-        # NOTE: temperature=0.0 is set for the demo recording so the same
-        # prompt produces (close to) the same story output, which lets the
-        # asset cache hit on visual_cue / dialogue keys. After recording,
-        # bump back to 0.8 for varied creative output across runs.
-        raw = _groq_chat(system, user, temperature=0.0)
+        # Higher temperature so reruns actually produce different stories —
+        # asset caches that key off dialogue text intentionally invalidate
+        # on each new run, which is what users expect when they click
+        # "Rerun story". The edit-agent path that needs deterministic
+        # output passes its own directive to control variation.
+        raw = _groq_chat(system, user, temperature=0.8)
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
@@ -120,9 +121,11 @@ class CharacterDesignerTool(BaseTool):
             "`reference_style` should be one of: cinematic, anime, noir, cyberpunk, photorealistic, watercolor.\n\n"
             + json.dumps(scene_manifest)
         )
-        # See temperature=0.0 note in StoryGeneratorTool — same demo-recording
-        # rationale (deterministic-ish character roster → portrait cache hit).
-        raw = _groq_chat(system, user, temperature=0.0)
+        # Moderate temperature: enough variation that fresh story runs get
+        # fresh-feeling characters, but low enough that the gender/voice
+        # roster stays sensible (the schema is strict so high temperatures
+        # tend to break the JSON shape).
+        raw = _groq_chat(system, user, temperature=0.5)
         try:
             return json.loads(raw)
         except json.JSONDecodeError:

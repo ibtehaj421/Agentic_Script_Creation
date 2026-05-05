@@ -4,9 +4,23 @@ Implemented as a dedicated module so tests can exercise the normalisation
 path without booting the Groq client."""
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from shared.schemas import Character, DialogueTurn, Scene, StoryState
+
+
+# LLMs sometimes embed stage directions in dialogue ("(whispers) I see it",
+# "*sighs* fine", "[shouting] now!"). TTS reads them literally, so strip
+# them before they hit the audio pipeline. The visible subtitle uses the
+# same cleaned line, so on-screen text stays in sync with the spoken audio.
+_STAGE_DIR_RE = re.compile(r"[\(\[\*][^\(\[\*\)\]]{1,40}[\)\]\*]")
+
+
+def _strip_stage_directions(text: str) -> str:
+    cleaned = _STAGE_DIR_RE.sub(" ", text)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    return cleaned.strip(" -—,;:")
 
 
 def normalise_story(raw: dict[str, Any], prompt: str) -> StoryState:
@@ -17,12 +31,12 @@ def normalise_story(raw: dict[str, Any], prompt: str) -> StoryState:
         dialogue = [
             DialogueTurn(
                 speaker=str(d.get("speaker", "Narrator")).strip() or "Narrator",
-                line=str(d.get("line", "")).strip(),
+                line=_strip_stage_directions(str(d.get("line", ""))),
                 visual_cue=str(d.get("visual_cue", "")).strip(),
                 emotion=str(d.get("emotion", "neutral")).strip().lower() or "neutral",
             )
             for d in s.get("dialogue", [])
-            if d.get("line")
+            if d.get("line") and _strip_stage_directions(str(d.get("line", "")))
         ]
         scenes.append(
             Scene(

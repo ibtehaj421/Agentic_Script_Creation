@@ -11,6 +11,7 @@ from .io_utils import (
 )
 from .ffmpeg_utils import probe_duration, run_ffmpeg, video_encoder_args
 from .logging_utils import emit, get_logger, with_event_sink
+from .phase_cache import clear_phase_cache
 
 __all__ = [
     "atomic_write_bytes",
@@ -27,4 +28,5 @@ __all__ = [
     "emit",
     "get_logger",
     "with_event_sink",
+    "clear_phase_cache",
 ]
