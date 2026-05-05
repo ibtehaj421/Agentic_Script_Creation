@@ -1,0 +1,540 @@
+% Agentic AI — Final Project Report
+% Authored directly in LaTeX. Compile with: xelatex report.tex (twice for TOC).
+\documentclass[11pt,a4paper]{article}
+
+% ---------- Packages ----------
+\usepackage[margin=1in]{geometry}
+\usepackage{fontspec}
+\usepackage{microtype}
+\usepackage{setspace}
+\setstretch{1.15}
+
+\usepackage{xcolor}
+\definecolor{accent}{HTML}{2C5282}
+\definecolor{muted}{HTML}{4A5568}
+\definecolor{codebg}{HTML}{F7FAFC}
+\definecolor{codeborder}{HTML}{E2E8F0}
+\definecolor{tablehd}{HTML}{EDF2F7}
+
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{longtable}
+\renewcommand{\arraystretch}{1.25}
+
+% enumitem unavailable on this TeX install; default itemize spacing is fine
+
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeborder},
+  framerule=0.4pt,
+  framexleftmargin=4pt,
+  framexrightmargin=4pt,
+  framextopmargin=4pt,
+  framexbottommargin=4pt,
+  xleftmargin=0pt,
+  breaklines=true,
+  showstringspaces=false,
+  columns=flexible,
+  aboveskip=0.8em,
+  belowskip=0.8em,
+}
+
+\usepackage[hidelinks,colorlinks=true,linkcolor=accent,urlcolor=accent]{hyperref}
+
+% Both titlesec and sectsty unavailable on the basic TeX install. Override
+% \section / \subsection directly so headings still get the accent colour.
+\makeatletter
+\renewcommand\section{\@startsection{section}{1}{\z@}%
+   {-1.6ex \@plus -0.5ex \@minus -0.2ex}%
+   {0.8ex \@plus 0.2ex}%
+   {\Large\bfseries\color{accent}}}
+\renewcommand\subsection{\@startsection{subsection}{2}{\z@}%
+   {-1.1ex \@plus -0.4ex \@minus -0.2ex}%
+   {0.6ex \@plus 0.2ex}%
+   {\large\bfseries\color{accent!85!black}}}
+\makeatother
+
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\small\color{muted}\thepage}
+\renewcommand{\headrulewidth}{0pt}
+
+% Use a clean sans-serif throughout. Charter has good readability in body text;
+% fall back to system fonts that have unicode arrows.
+\setmainfont{Charter}[Ligatures=TeX]
+\setmonofont{Menlo}[Scale=0.9]
+
+% Convenience macros
+\newcommand{\rarr}{\(\rightarrow\)}
+\newcommand{\code}[1]{\texttt{\small #1}}
+
+% ---------- Document ----------
+\begin{document}
+
+% ===================== Title block =====================
+\begin{center}
+\vspace*{-1.2em}
+{\Huge\bfseries\color{accent} Agentic AI --- Final Project Report\par}
+\vspace{1.2em}
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{l@{\hspace{2em}}l}
+\textbf{Muhammad Taha}    & 22i-0983 \\
+\textbf{Ibtehaj Haider}   & 22i-0767 \\
+\textbf{Hussain Waseem}   & 22i-0893 \\
+\end{tabular}
+\renewcommand{\arraystretch}{1.25}
+\end{center}
+
+\vspace{1.5em}
+\hrule
+\vspace{1.5em}
+
+% ===================== 1. Executive summary =====================
+\section{Executive summary}
+
+This project implements the complete \emph{prompt \rarr{} polished short film}
+pipeline specified in the course brief. A single English-language prompt produces,
+without further human creative intervention, a finished animated short: structured
+script, voiced dialogue, per-scene mood-music, background visuals, subtitles,
+per-character portraits, and a final composited MP4. An intelligent edit agent
+then accepts free-text commands ("make scene 2 darker", "speed up this scene",
+"regenerate the script"), routes each to the minimal affected phase, and writes
+a versioned snapshot so any edit is reversible with branching semantics.
+
+\smallskip
+\textbf{Delivered in this submission:}
+\begin{itemize}
+  \item All five phases implemented and integration-tested.
+  \item 47 passing unit + integration tests covering the shared schema, MCP tool
+        layer, state manager (with branching), intent classifier (17 query types),
+        planner, subtitle timing, and backend routes.
+  \item An end-to-end demo run (3-scene Neo-Tokyo detective vignette) renders in
+        \textbf{$\sim$5 minutes} cold-start on an Apple M4 Air, with 3 edit actions
+        + 2 undos applied in under 30 seconds each.
+  \item A React web UI serving live phase progress via WebSocket, scene thumbnails,
+        version history with active-pointer + lineage tooltips, and the edit-chat
+        interface.
+  \item Zero paid APIs are required: Groq (free tier), Pollinations (keyless),
+        edge-tts (keyless), \code{ffmpeg} (local). Optional drop-in upgrades are
+        wired for ElevenLabs (voice quality) and fal.\,ai (HD image gen) when keys
+        are configured in \code{.env}.
+\end{itemize}
+
+% ===================== 2. System architecture =====================
+\section{System architecture}
+
+\subsection{Five modules, one JSON contract}
+The system is five loosely-coupled modules connected by a single Pydantic state
+object, \code{PipelineState}. Nothing else crosses module boundaries --- the
+edit agent, web UI, and any future module that wants to participate just reads
+and writes that one object.
+
+\smallskip
+\begin{lstlisting}[language={}]
+   prompt
+     |
+     v
+  Phase 1 (story_agent)        --->  StoryState
+     |
+     v
+  Phase 2 (audio_agent)        --->  TimingManifest
+     |
+     v
+  Phase 3 (video_agent)        --->  VideoOutput  --->  final_*.mp4
+     ^
+     |  re-enter any phase
+     |
+  Phase 5 (edit_agent)  <-->  StateManager (SQLite log + asset freeze)
+     ^
+     |
+  Phase 4 (web UI / FastAPI)
+\end{lstlisting}
+
+Each phase exposes both a \emph{full-run} entry point (e.g. \code{run\_story\_phase})
+and partial entry points used by the edit agent (e.g.
+\code{regenerate\_scene\_audio}, \code{regenerate\_scene\_background}). This dual
+entry surface is what makes precise per-intent re-runs cheap: \emph{"make scene 2
+darker"} regenerates one background and re-stitches the final video; the other
+scenes' assets are untouched.
+
+\subsection{Shared JSON schema}
+The Pydantic schema in \code{shared/schemas/} is the single source of truth.
+Every value crossing phase boundaries is typed:
+
+\begin{itemize}
+  \item \code{PipelineState} --- top-level container: \code{job\_id}, \code{prompt},
+        \code{num\_scenes}, \code{style}, \code{story}, \code{audio}, \code{video},
+        \code{phase\_status}, \code{version}.
+  \item \code{StoryState} --- title, logline, language, list of \code{Scene}
+        (location, action, characters, dialogue lines with emotion + visual cue),
+        list of \code{Character} (name, role, appearance, voice\_style, gender,
+        reference\_style, image\_path).
+  \item \code{TimingManifest} --- per-line \code{AudioSegment}s with start/end
+        offsets, plus per-scene merged audio paths and BGM track paths.
+  \item \code{VideoOutput} --- per-scene \code{SceneClip}s (background path, raw
+        ken-burns clip, composed scene MP4) plus the final stitched MP4.
+\end{itemize}
+
+\subsection{MCP tool layer}
+A small framework lives under \code{mcp/}: \code{BaseTool} (with a \code{ToolSpec}
+declaring name + category + JSON schema), a singleton \code{ToolRegistry}, and
+\code{ToolExecutor} which wraps every call with retry, structured event emission,
+and automatic \code{job\_id} injection so every tool's outputs route into a
+per-job subdirectory. The executor's introspection step
+(\code{inspect.signature(tool.run)}) only injects \code{job\_id} when the tool
+declares the parameter, so legacy LLM tools that don't care about it remain
+untouched.
+
+\bigskip
+% ===================== 3. Phase-by-phase =====================
+\section{Phase-by-phase implementation}
+
+\subsection{Phase 1 --- Story, script \& character design (15\%)}
+
+\textbf{Inputs:} free-form prompt + scene count + style hint.
+\textbf{Outputs:} \code{StoryState} with scenes, dialogue, character roster,
+character portrait images.
+
+The story agent makes two LLM calls via Groq's free tier (Llama 3.3 70B in JSON
+mode): \code{generate\_story} produces title, logline, scenes with dialogue
+turns, and \code{design\_characters} normalises a roster with appearance,
+\code{voice\_style}, \code{gender}, and \code{reference\_style}. Strict JSON-mode
+output plus a Pydantic post-validation step removes the entire class of
+"the LLM almost gave us valid JSON" bugs.
+
+\textbf{Prompt-engineering iterations.} An early failure mode was the LLM
+populating the \code{line} field with \emph{stage directions} ("Rain pours
+down", "Shadows hide faces") instead of spoken dialogue. We tightened the
+system prompt with explicit GOOD vs. BAD examples and a rule that lines must be
+8--25 words, contain contractions / hesitation, and never describe what the
+camera sees (that goes in \code{visual\_cue}). Result: dialogue now reads as
+real speech.
+
+\textbf{Character portraits} are fetched from Pollinations (square 1024 px
+images), with a Pillow-rendered placeholder fallback so the pipeline never
+hard-fails on the "output completeness" rubric criterion.
+
+\subsection{Phase 2 --- Audio generation \& integration (15\%)}
+
+\textbf{Inputs:} \code{StoryState}.
+\textbf{Outputs:} per-line WAV files, per-scene merged audio, \code{TimingManifest}
+with millisecond offsets.
+
+\textbf{Voice assignment.} Each character is hashed (MD5 of name) into a
+gender-aware voice pool. Hash determinism guarantees the same character keeps
+the same voice across all scenes. The pool is split by gender; an explicit
+character.gender field (populated by the LLM character designer) selects which
+half to hash into. We use Microsoft \emph{Multilingual Neural} edge-tts voices
+by default --- the highest-quality keyless tier --- and ElevenLabs Multilingual
+v2 when \code{ELEVENLABS\_API\_KEY} is set in \code{.env}, with a graceful
+fallback if the EL quota is exhausted.
+
+\textbf{Emotion playbook.} Each scene's dialogue line carries an \code{emotion}
+attribute (extracted by the LLM). At synthesis time we apply both a
+\emph{text-cue} rewrite (\texttt{"!!"} for shout, \texttt{"..."} for sad,
+lowercase + ellipsis for reflective) and an emotion-specific FFmpeg post-filter:
+
+\begin{tabularx}{\textwidth}{l X X}
+\toprule
+\textbf{Emotion} & \textbf{Text rewrite} & \textbf{FFmpeg post-filter} \\
+\midrule
+whisper & --- (text unchanged) & \code{volume=0.45, highpass=f=100, treble=g=4} \\
+shout & strip terminal \texttt{.}, append \texttt{!!} & \code{volume=1.35, acompressor, treble=g=2} \\
+angry & append \texttt{!} & \code{acompressor, treble=g=2} \\
+sad & append \texttt{...} & \code{atempo=0.93, lowpass=f=4500, volume=0.88} \\
+happy / excited & append \texttt{!} & \code{atempo=1.05, treble=g=2} \\
+panic / fear & append \texttt{!} & \code{atempo=1.08, treble=g=3, acompressor} \\
+\bottomrule
+\end{tabularx}
+
+The on-screen subtitle still uses the original line text, so captions stay
+clean regardless of the cued text.
+
+\textbf{BGM} is mood-driven: each scene's mood maps to a track in the
+\emph{Ambient Film Music} CC-BY 3.0 library (Serge Quadrado, sourced from
+archive.org via \code{scripts/fetch\_bgm.py}). If a track is missing, a
+multi-oscillator chord pad synthesised in pure FFmpeg \code{lavfi} is used as
+fallback. The dialogue \rarr{} BGM mix uses a static $-7$\,dB bed instead of
+sidechain ducking, which (despite its theoretical appeal) suppressed the BGM
+into inaudibility against TTS that already varies in level.
+
+\subsection{Phase 3 --- Video generation \& composition (20\%)}
+
+\textbf{Inputs:} \code{StoryState} + \code{TimingManifest}.
+\textbf{Outputs:} per-scene MP4s and the final stitched \code{final\_<job\_id>.mp4}.
+
+\textbf{Per-line close-up flow.} Rather than a single Ken-Burns over the scene
+background, each scene is rendered as: a 1.8\,s \emph{establishing wide shot}
+of the location (Ken-Burns over the BG, brief mood-BGM under it), then a
+sequence of \emph{speaker close-ups}: each dialogue line uses that speaker's
+portrait, top-aligned 16:9 crop (so the face stays in frame), Ken-Burns'd over
+the line's audio duration, with the line's subtitle burned on. Hard cuts
+between speakers give classic shot/reverse-shot feel.
+
+\textbf{Subtitle burning} uses Pillow-rendered transparent PNGs overlaid via
+FFmpeg's \code{overlay=enable='between(t,a,b)'} filter --- the standard
+\code{subtitles}/\code{ass} filters require libass which Homebrew's stock
+\code{ffmpeg} ships without. The PNG path is libass-free, supports millisecond
+timing, and renders with anti-aliased text + drop-shadow on a translucent
+rounded background plate so captions remain legible on bright scenes.
+
+\textbf{Final compositor} stitches scene MP4s with FFmpeg \code{xfade}
+transitions and \code{acrossfade} on the audio, then applies
+\code{-movflags +faststart} so the \code{moov} atom lives at the front of the
+file and browsers can begin progressive playback before the full MP4 is
+buffered.
+
+\textbf{Encoder choice.} We initially used \code{h264\_videotoolbox} on macOS
+for $\sim$6\,$\times$ speed-up over software encoding, but discovered late in
+development that videotoolbox silently outputs \code{yuvj420p} (full-range,
+JPEG-style colour space) which Firefox 150 refuses to play in HTML5
+\code{<video>}. Switched the default encoder to \code{libx264} which produces
+clean \code{yuv420p} + \code{color\_range=tv} that every browser handles. The
+videotoolbox path remains available via the \code{VIDEO\_ENCODER} env var.
+
+\subsection{Phase 4 --- Web interface (10\%)}
+
+A FastAPI backend with a WebSocket progress stream, paired with a React 18 SPA
+served as a pre-built JSX bundle. The bundle is built once with
+\code{esbuild}; users don't need to run \code{npm install} for the demo --- the
+backend's \code{/static} mount serves the JS directly.
+
+\textbf{Real-time progress.} The pipeline emits structured events
+(\code{phase\_start}, \code{tool\_start}, \code{tool\_ok}, \code{scene\_composed},
+\code{final\_ready}, \code{snapshot}, \code{job\_complete}) that the WebSocket
+fans out to all connected clients of the relevant \code{job\_id}. The UI
+renders these as a live event log.
+
+\textbf{Phase rerun} buttons in the sidebar invalidate the affected
+\code{PipelineState} subtrees and re-trigger only the requested phase ---
+useful when the LLM produces a flat scene and you want to roll the dice again
+without losing the audio you already rendered.
+
+\textbf{Resume picker.} The frontend persists \code{job\_id} to
+\code{localStorage} and queries \code{/api/jobs} for a list of past runs, so
+closing the browser doesn't lose your active session and you can switch
+between jobs from a dropdown.
+
+\textbf{Version-history panel.} Each row shows the version number, an arrow
+indicating its parent (\code{$\leftarrow$ vN}), the triggered-by tag, and a
+human change summary. The currently \emph{active} version is highlighted with
+an accent-coloured border + "$\bullet$ active" badge. Hovering any row reveals
+its full lineage chain (e.g.\ \code{lineage: v6 \rarr{} v3 \rarr{} v1}).
+
+\subsection{Phase 5 --- Edit agent + undo (20\%)}
+
+The edit agent is a four-node LangGraph: \code{classify\_intent} \rarr{}
+\code{plan\_execution} \rarr{} \code{execute} \rarr{} \code{snapshot}. The
+classifier tries Groq first (LLM-mode) for nuanced understanding; on any error
+it falls back to a deterministic keyword rule set so the demo never blocks
+offline. The planner maps an \code{EditIntent} to a list of (handler, kwargs)
+steps; the executor dispatches each step to a story / audio / video module
+function.
+
+\textbf{Generic visual modifications.} A single \code{modify\_scene\_visual}
+intent handles the full free-text design surface --- "make scene 1 darker",
+"more orange", "add buildings", "make it nighttime" --- by extracting four
+structured params (\code{prompt\_suffix}, \code{brightness\_delta},
+\code{saturation\_delta}, \code{hue\_shift}) from the directive and applying
+them: the suffix is appended to the scene-background prompt for re-fetch, and
+the deltas drive an FFmpeg \code{eq + hue} colour-grade pass on the rendered
+scene MP4.
+
+\textbf{State versioning.} Every snapshot is an append-only row in a SQLite log
+(\code{state.sqlite}) with a \code{parent\_version} pointer. A separate
+\code{active\_version} table tracks which row is currently checked out.
+\textbf{Undo and restore are pointer moves}, not new rows --- they update
+\code{active\_version} to a target version and copy that version's frozen
+assets back into the working tree. Subsequent edits create new versions whose
+parent is whatever the active pointer was at edit time, giving us git-style
+branching: undo to v2, edit again, and v4 has \code{parent\_version=2} (not
+v3, the abandoned branch).
+
+\bigskip
+% ===================== 4. Challenges =====================
+\section{Challenges and resolutions}
+
+\begin{description}
+  \item[Cross-job filename collision.] Per-scene MP4 paths
+    (\code{scenes/scene\_01.mp4}) were shared across jobs, so generating job B
+    overwrote job A's working files.  \textbf{Fix:} every output tool now
+    routes through a \code{job\_dir(BASE, job\_id)} helper that returns
+    \code{<BASE>/<job\_id>/} --- structurally impossible for two jobs to
+    overwrite each other.
+  \item[ElevenLabs read \texttt{[whispers]} as text.] The Multilingual v2 model
+    advertises support for inline audio tags but in practice often pronounces
+    them aloud. \textbf{Fix:} dropped the tag prefix entirely and implemented
+    whisper acoustically via FFmpeg post-processing (volume cut + high-pass +
+    treble lift).
+  \item[Edge-tts retired voices.] Several voices in our pool were retired by
+    Microsoft in late April 2026 and now fail with "No audio was received".
+    \textbf{Fix:} rebuilt the pool from currently-live multilingual voices,
+    verified against \code{edge\_tts.list\_voices()} on 2026-04-25.
+  \item[Groq JSON-mode flakiness.] Despite \code{response\_format=\{"type":"json\_object"\}},
+    Groq occasionally wrapped the payload in a Markdown fence
+    (\code{\textbackslash\textbackslash`\textbackslash`\textbackslash`json...}\code{\textbackslash\textbackslash`\textbackslash`\textbackslash`}) which broke
+    \code{json.loads}. \textbf{Fix:} added a defensive extractor that strips
+    fences and surrounding prose before parsing, plus a Pydantic
+    post-validation layer so a malformed response is degraded to a placeholder
+    rather than aborting the whole run.
+  \item[WebSocket dropped during long renders.] Cold-start renders that wait
+    on Pollinations for 60--90\,s per image would silently drop the progress
+    WebSocket on some networks (no events received, but pipeline still
+    running). \textbf{Fix:} added a 15-second heartbeat ping from the server
+    and a client-side reconnect-with-backoff so the live event log stays
+    populated even on flaky links.
+  \item[SQLite write contention on parallel edits.] When the web UI submitted
+    a \code{/api/edit} while a phase rerun was still writing snapshots, both
+    paths competed for \code{state.sqlite} and one would intermittently raise
+    \code{database is locked}. \textbf{Fix:} the storage layer now opens
+    connections with \code{isolation\_level="IMMEDIATE"} and a 5-second busy
+    timeout, serialising writes safely without forcing a global lock.
+\end{description}
+
+% ===================== 5. Testing =====================
+\section{Testing}
+
+\textbf{47 passing unit + integration tests} grouped by concern:
+
+\begin{tabularx}{\textwidth}{l X r}
+\toprule
+\textbf{Module} & \textbf{Coverage} & \textbf{Cases} \\
+\midrule
+\code{test\_edit\_intent}      & 17 free-text query types $\rightarrow$ correct intent / target / scope, plus offline keyword fallback                                  & 19 \\
+\code{test\_state\_manager}    & Append-only log invariant, branching after undo (\code{parent\_version} chain), asset freeze + restore round-trip                     & 4  \\
+\code{test\_planner}           & Scene-id parsing from natural language, parameter extraction                                                                          & 4  \\
+\code{test\_schemas}           & \code{PipelineState} round-trip, default values                                                                                       & 5  \\
+\code{test\_subtitle\_timing}  & Per-line offset accumulation                                                                                                          & 3  \\
+\code{test\_mcp\_tools}        & Tool registration, executor retry, auto job\_id injection                                                                             & 5  \\
+\code{test\_story\_planner}    & Normalisation of LLM JSON output                                                                                                      & 3  \\
+\code{test\_api\_shape}        & Backend route shape via FastAPI \code{TestClient}                                                                                     & 4  \\
+\bottomrule
+\end{tabularx}
+
+% ===================== 6. Results =====================
+\section{Results --- a demo run}
+
+\textbf{Prompt:} "A detective meets a nervous informant in a rainy Tokyo alley
+at midnight."  \textbf{Scenes:} 3.  \textbf{Style:} cinematic.
+
+\smallskip
+\textbf{Cold-start render time on M4 Air:} approximately 5 minutes, dominated
+by Pollinations API wait (4 image fetches at $\sim$30--60 s each). All other
+phases combined add \textless\,10 seconds.
+
+\smallskip
+\textbf{Output:} a 33-second 1024$\times$576 H.264 + AAC MP4 with: an
+establishing wide shot of the alley at the start of each scene, character
+close-ups during dialogue (Detective Nakamura's portrait alternating with
+Informant Tanaka's), mood-matched BGM under the dialogue, and burned
+subtitles. The dialogue actually advances a story (informant divulges
+information about the Matsumoto case, detective probes for proof, informant
+panics) rather than reading like a weather report.
+
+\smallskip
+\textbf{Edits applied:}
+\begin{itemize}
+  \item \emph{"make scene 1 darker"} \rarr{} BG regenerates with darker prompt
+        suffix, \code{eq=brightness=-0.15:saturation=0.9} applied to the scene
+        MP4. $\sim$60\,s (Pollinations BG re-fetch).
+  \item \emph{"change voice tone to whispered"} \rarr{} per-line TTS
+        re-rendered with whisper DSP chain, $\sim$25\,s.
+  \item \emph{"speed up scene 2"} \rarr{} \code{atempo=1.5} on scene 2 MP4,
+        re-stitch final, $\sim$3\,s.
+\end{itemize}
+
+\textbf{Reverts:} two pointer moves --- "Undo last" reverted speed-up; "Restore v3"
+returned to the post-darker / pre-whisper state. No new rows were
+\emph{created} for the undo (only for the subsequent edits if any).
+
+% ===================== 7. Rubric coverage =====================
+\section{Rubric coverage (self-assessment)}
+
+\begin{tabularx}{\textwidth}{l c X}
+\toprule
+\textbf{Criterion} & \textbf{Weight} & \textbf{Evidence} \\
+\midrule
+Phase 1 --- Story \& Script    & 15\% & Strict-JSON LLM output, character roster with consistent voice + appearance, validated with \code{test\_story\_planner} \\
+Phase 2 --- Audio Generation   & 15\% & Deterministic per-character voice, gender-aware pool, emotion playbook (text cues + DSP), timing manifest accurate to ms \\
+Phase 3 --- Video Composition  & 20\% & Per-scene 16:9 native (no upscale), Ken-Burns + close-up flow, A/V sync via timing manifest, xfade transitions, browser-safe \code{yuv420p} + \code{+faststart} \\
+Phase 4 --- Web Interface      & 10\% & Live WebSocket progress, scene tile previews, phase re-run, version history with active highlight + lineage tooltip, edit chat \\
+Phase 5 --- Edit Agent + Undo  & 20\% & 17 tested intent types, append-only SQLite log + active-pointer + branching via \code{parent\_version}, generic \code{modify\_scene\_visual} for free-text directives \\
+Integration / Pipeline         & 10\% & Single Pydantic state object, all phases compose without translation, structured events flow to UI \\
+Report \& Presentation         & 10\% & This document + recorded demo \\
+\bottomrule
+\end{tabularx}
+
+\bigskip
+% ===================== 8. Division of work =====================
+\section{Division of work}
+
+This was a \textbf{3-person group}. Phase responsibility was distributed so
+each member owned roughly equivalent rubric weight, with shared ownership of
+the cross-cutting layer (JSON schema, integration testing).
+
+\renewcommand{\arraystretch}{1.4}
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{Member} & \textbf{ID} & \textbf{Primary phase(s) and key responsibilities} \\
+\midrule
+Hussain Waseem &
+22i-0893 &
+\textbf{Phase 1 --- Story \& Script.} Pydantic schema design for the
+inter-phase JSON contract, Groq LLM integration with strict JSON mode,
+story+character generation prompts, character roster validation + portrait
+pipeline, edit-intent classifier prompt engineering. \\
+Ibtehaj Haider &
+22i-0767 &
+\textbf{Phase 2 (Audio) + Phase 3 (Video Composition).} Voice pool curation
+(edge-tts + ElevenLabs), gender-aware voice picker, emotion prosody map +
+DSP playbook, mood-driven BGM (library + synth fallback), dialogue/BGM mixing
+with ducking, timing manifest design, Pollinations / fal.\,ai image
+generation, FFmpeg primitives (Ken Burns, portrait overlay, color grade),
+subtitle burner (Pillow PNG overlays, libass-free), scene + final
+compositors with xfade, video agent close-up flow + establishing shots. \\
+Muhammad Taha &
+22i-0983 &
+\textbf{Phase 4 (Web App) + Phase 5 (Edit Agent \& Versioning).} FastAPI +
+WebSocket backend, React SPA frontend (prompt $\rightarrow$ progress $\rightarrow$
+preview, version history, edit chat), MCP tool registry + executor framework,
+LangGraph edit-agent graph (intent classifier + planner + executor),
+\code{StateManager} with append-only SQLite log + active-version pointer +
+parent-version lineage, undo/restore semantics, end-to-end orchestrator
+wiring. \\
+\bottomrule
+\end{tabularx}
+\renewcommand{\arraystretch}{1.25}
+
+\smallskip
+Jointly owned by all three members: the shared JSON contract
+(\code{shared/schemas/}), integration testing across phase boundaries, the
+demo recording, and this report.
+
+% ===================== 9. Future work =====================
+\section{Future work}
+
+\begin{itemize}
+  \item \textbf{True video generation.} The current stack uses still-image
+    Ken-Burns motion, which is stable on CPU and avoids frame-by-frame
+    hallucination. A hosted RunwayML / Luma Dream Machine integration could
+    plug in as a drop-in replacement for \code{generate\_scene\_background +
+    ken\_burns}, behind a feature flag.
+  \item \textbf{Better BGM.} The synthesised chord pad is mood-correlated but
+    uninspired; expanding the curated CC-licensed library (we have one
+    starter set from Serge Quadrado) and adding a local MusicGen path would
+    raise production quality meaningfully.
+  \item \textbf{Subtitle styling.} Once \code{libass}-enabled \code{ffmpeg} is
+    available, ASS subtitles allow per-character typography (italics for
+    whispered, larger for shouted) without leaving the FFmpeg pipeline.
+  \item \textbf{HD images on a paid tier.} Wiring fal.\,ai schnell behind the
+    \code{FAL\_KEY} env var produces native 1920$\times$1080 from FLUX for
+    $\sim$\$0.006/image --- worth the few dollars of credit for a final
+    submission render.
+\end{itemize}
+
+\end{document}
