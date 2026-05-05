@@ -17,3 +17,10 @@ frontend/static/assets/
 .vscode/
 .idea/
 Agentic AI Final Project - 2026.pdf
+third_party/Wav2Lip/checkpoints/*.pth
+third_party/Wav2Lip/temp/
+third_party/Wav2Lip/results/
+docs/*.aux
+docs/*.log
+docs/*.out
+docs/*.toc

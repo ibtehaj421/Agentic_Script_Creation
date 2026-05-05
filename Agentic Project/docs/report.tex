@@ -119,10 +119,13 @@ a versioned snapshot so any edit is reversible with branching semantics.
   \item A React web UI serving live phase progress via WebSocket, scene thumbnails,
         version history with active-pointer + lineage tooltips, and the edit-chat
         interface.
+  \item \textbf{Wav2Lip-driven lip-sync} on speaker close-ups via a
+        mouth-region alpha-blend that keeps the rest of the frame at native
+        portrait resolution.
   \item Zero paid APIs are required: Groq (free tier), Pollinations (keyless),
-        edge-tts (keyless), \code{ffmpeg} (local). Optional drop-in upgrades are
-        wired for ElevenLabs (voice quality) and fal.\,ai (HD image gen) when keys
-        are configured in \code{.env}.
+        edge-tts (keyless), \code{ffmpeg} (local), Wav2Lip (local CPU). Optional
+        drop-in upgrades are wired for ElevenLabs (voice quality) and fal.\,ai
+        (HD image gen) when keys are configured in \code{.env}.
 \end{itemize}
 
 % ===================== 2. System architecture =====================
@@ -212,8 +215,33 @@ populating the \code{line} field with \emph{stage directions} ("Rain pours
 down", "Shadows hide faces") instead of spoken dialogue. We tightened the
 system prompt with explicit GOOD vs. BAD examples and a rule that lines must be
 8--25 words, contain contractions / hesitation, and never describe what the
-camera sees (that goes in \code{visual\_cue}). Result: dialogue now reads as
-real speech.
+camera sees (that goes in \code{visual\_cue}).
+
+A second, subtler variant survived the system-prompt fix: parenthetical and
+markdown stage directions \emph{embedded inside} otherwise-spoken lines
+(\texttt{"(whispers) I see something"}, \texttt{"*sighs* fine"},
+\texttt{"[shouting] now!"}). The TTS provider read these aloud verbatim
+("whispers I see something") because nothing stripped them on the way to
+synthesis. Resolved with a regex pass in \code{normalise\_story} that strips
+\texttt{(\ldots)}, \texttt{[\ldots]}, and \texttt{*\ldots*} segments before the
+line lands in the \code{DialogueTurn}. The cleaned line is used both for TTS
+and for on-screen subtitles, so audio and captions stay in lockstep.
+
+\textbf{Style-aware prompting.} The user-facing style dropdown
+(\code{cinematic / photorealistic / anime / noir / cyberpunk / watercolor})
+originally fed a single token into the image prompt while the surrounding
+prompt hardcoded \emph{"photorealistic, ultra detailed, sharp focus, 8k"} as
+quality tail. The contradictory tokens caused diffusion models to ignore the
+selected style and resolve toward photorealism every time. Replaced the
+hardcoded tail with a per-style token map: \code{anime} now anchors with
+\texttt{"anime illustration: \ldots cel-shaded, vibrant flat colors, manga
+aesthetic, no photorealism"}, \code{noir} with \texttt{"film noir frame: \ldots
+black and white, hard shadows, 1940s detective film"}, \code{cyberpunk} with
+\texttt{"cyberpunk concept art: \ldots neon-soaked, blade runner aesthetic"},
+etc. Cinematic and photorealistic remain distinct ("35\,mm film grain,
+anamorphic, color graded" vs.\ "hyperrealistic photograph, dslr, natural
+lighting"). The cache key includes the style token, so existing jobs cache-miss
+into the corrected prompt on next render.
 
 \textbf{Character portraits} are fetched from Pollinations (square 1024 px
 images), with a Pillow-rendered placeholder fallback so the pipeline never
@@ -276,6 +304,47 @@ portrait, top-aligned 16:9 crop (so the face stays in frame), Ken-Burns'd over
 the line's audio duration, with the line's subtitle burned on. Hard cuts
 between speakers give classic shot/reverse-shot feel.
 
+\textbf{Wav2Lip mouth-region blend.} The close-ups originally showed a static
+portrait whose lips never moved while the speaker's voice played, which broke
+the illusion of dialogue. We integrated the pretrained
+\href{https://github.com/justinjohn0306/Wav2Lip}{Wav2Lip GAN} (vendored under
+\code{third\_party/Wav2Lip}, checkpoint \code{wav2lip\_gan.pth}) to synthesise
+lip motion from the dialogue WAV. Three engineering hurdles surfaced:
+
+\begin{itemize}
+  \item \textbf{NumPy 2.x incompatibility.} The fork uses retired aliases
+        \code{np.int} which 2.x removed; patched call sites in
+        \code{face\_detection/utils.py} to \code{np.int32}.
+  \item \textbf{Bundled face-detector weights missing.} The inference script
+        hardcoded \code{checkpoints/mobilenet.pth} (not shipped); patched to
+        \code{model\_path=None} so \code{batch\_face} auto-downloads the
+        canonical mobilenet RetinaFace weights to the user's torch hub cache
+        on first run.
+  \item \textbf{Whole-frame softness from the 96$\times$96 face patch.}
+        Wav2Lip internally renders the face at 96$\times$96 and upscales it
+        to fit the detected face bbox. Used as the full visual it noticeably
+        blurs the entire face. We resolved this by treating Wav2Lip's output
+        as a \emph{motion source} for the mouth area only: the static portrait
+        is rendered at native resolution as the base, an elliptical alpha
+        mask is built around the detected mouth landmarks (RetinaFace returns
+        mouth-corner points; the ellipse covers them plus a 7\,\% face-height
+        chin allowance), and Wav2Lip's clip is alpha-merged onto the base via
+        FFmpeg only inside that ellipse. A 4\,\% Gaussian feather softens the
+        seam. Outside the ellipse, every pixel is the original portrait at
+        native resolution; only the mouth (where lip-motion lives) carries
+        Wav2Lip pixels.
+\end{itemize}
+
+\textbf{Quality-recovery chain on the masked region.} Even confined to the
+mouth ellipse, the 96\,px Wav2Lip patch is perceptibly softer than the
+surrounding portrait. The lip-sync stream goes through a 2$\times$ Lanczos
+upscale, two-radius unsharp (3\,px and 7\,px), AMD's CAS (Contrast-Adaptive
+Sharpening, halo-free by design and intended for upscaled content), and a
+Lanczos downscale back to target. The non-mouth pixels never see this filter.
+A \code{try/except} around the \code{mouth\_blend\_clip} tool falls back to
+plain Ken-Burns motion if face detection fails on a stylised illustration, so
+one bad portrait never kills the render.
+
 \textbf{Subtitle burning} uses Pillow-rendered transparent PNGs overlaid via
 FFmpeg's \code{overlay=enable='between(t,a,b)'} filter --- the standard
 \code{subtitles}/\code{ass} filters require libass which Homebrew's stock
@@ -313,7 +382,51 @@ renders these as a live event log.
 \textbf{Phase rerun} buttons in the sidebar invalidate the affected
 \code{PipelineState} subtrees and re-trigger only the requested phase ---
 useful when the LLM produces a flat scene and you want to roll the dice again
-without losing the audio you already rendered.
+without losing the audio you already rendered. Manual reruns
+\textbf{cascade by default}: clicking \emph{Rerun story} regenerates the
+script and then auto-runs audio + video against the new dialogue (since the
+existing TTS wavs and scene composites are stale once dialogue lines change).
+\emph{Rerun audio} cascades into video. The cascade produces a single snapshot
+row in the version history, not three, so the dropdown stays clean. Edit-agent
+automatic reruns can still pass \code{force=false} to skip the cascade --- they
+know exactly which assets they touched.
+
+\textbf{Force-regenerate cache invalidation.} Every tool in the pipeline
+caches by content-hash filename to keep edit roundtrips cheap. Without
+intervention, this means a manual rerun returns the previously cached file
+byte-for-byte and produces no visible change --- which is correct
+deterministic behaviour but bad UX (users expect "rerun" to do work). Manual
+reruns now wipe the per-job cache directories before invoking the phase
+handler:
+
+\begin{center}
+\begin{tabularx}{\linewidth}{l X}
+\toprule
+\textbf{Phase} & \textbf{Wiped (recursive)} \\
+\midrule
+\code{video}    & \code{video/<job\_id>/}, \code{scenes/<job\_id>/} (covers ken-burns, wav2lip, mouth-blend, scene backgrounds, alpha masks, scene composites) \\
+\code{audio}    & + \code{audio/<job\_id>/} (TTS wavs, BGM tracks) \\
+\code{story}    & + \code{images/<job\_id>/} (character portraits) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\noindent The recursion matters: scene backgrounds live two levels deep
+(\code{video/<job\_id>/scene\_backgrounds/bg\_*.png}) and a flat wipe leaves
+those PNGs intact, masking the regen. With recursive wipe, image gen
+re-fetches from Pollinations with a fresh \code{seed=uuid4()} and every
+establishing shot visibly differs across runs. The wipe helper lives in
+\code{shared/utils/phase\_cache.py} so the rerun route and the edit-agent
+executor share one source of truth on what "invalidate phase X" means.
+
+A separate concern is \emph{LLM determinism}: Groq calls were initially
+pinned at \code{temperature=0.0} for asset-cache stability during development.
+At that setting the same prompt returned byte-identical text every time, so
+rerunning the story phase did nothing visible. Bumped to
+\code{temperature=0.8} for stories and 0.5 for character rosters, plus a
+randomly-chosen \emph{variation directive} appended to the prompt on
+force-regen reruns ("Try a fresh angle on this story", etc.) so the LLM
+explores different dialogue rhythms even within the same world.
 
 \textbf{Resume picker.} The frontend persists \code{job\_id} to
 \code{localStorage} and queries \code{/api/jobs} for a list of past runs, so
@@ -325,6 +438,16 @@ indicating its parent (\code{$\leftarrow$ vN}), the triggered-by tag, and a
 human change summary. The currently \emph{active} version is highlighted with
 an accent-coloured border + "$\bullet$ active" badge. Hovering any row reveals
 its full lineage chain (e.g.\ \code{lineage: v6 \rarr{} v3 \rarr{} v1}).
+
+\textbf{Cache-bust on snapshot.} The \code{<video>} element appends
+\code{?b=<active\_version>} to its \code{src}; whenever \code{refreshAll}
+fetches \code{/api/versions/<job\_id>} and discovers the active version has
+changed, the bust value updates and the player calls \code{.load()} to drop
+its buffer and refetch. Without this, every rerun produced a new MP4 at the
+same path on disk but the browser kept showing the old buffered video. The
+sync-to-active-version (rather than incrementing on UI actions only) means
+\emph{any} new snapshot --- UI-driven, CLI-driven, or programmatic ---
+correctly invalidates the player.
 
 \subsection{Phase 5 --- Edit agent + undo (20\%)}
 
@@ -394,6 +517,30 @@ v3, the abandoned branch).
     \code{database is locked}. \textbf{Fix:} the storage layer now opens
     connections with \code{isolation\_level="IMMEDIATE"} and a 5-second busy
     timeout, serialising writes safely without forcing a global lock.
+  \item[Wav2Lip motion-warp dead end.] Before settling on the mouth-region
+    blend, we tried "motion-only transfer": run Wav2Lip to extract per-frame
+    optical flow, then warp the high-resolution portrait pixels by that flow
+    so the original sharp mouth would appear to move with the synthesised
+    lip-sync. The warp was technically correct but visually broken --- when
+    a mouth opens, the frame contains \emph{new pixels} (teeth, tongue, dark
+    interior) that don't exist anywhere in the closed-mouth portrait. Optical
+    flow can warp existing pixels but cannot synthesise pixels that aren't
+    there; the result looked like the mouth was being smeared shut. Real
+    face-reenactment models (FOMM, NeRFace) handle this with a learned prior
+    over typical mouth interiors, which was out of scope. \textbf{Resolution:}
+    accepted that \emph{some} pixels in the mouth region must come from
+    Wav2Lip; minimised the visible footprint with the elliptical mask + CAS
+    sharpening described in the Phase 3 section.
+  \item[Determinism vs. user expectation on reruns.] The cache-everything,
+    deterministic-LLM design (\code{temperature=0.0}, content-hashed tool
+    output filenames) gave us byte-identical reproducibility but silently
+    converted "Rerun audio / video / story" buttons into no-ops. We
+    initially fixed only the route handler, but the bug persisted in the
+    edit-agent's \code{audio.rerun} and \code{video.rerun} steps because
+    those bypassed the route entirely. \textbf{Fix:} extracted the
+    cache-invalidation policy into \code{shared/utils/phase\_cache.py} and
+    made every "rerun" code path call it, so the route and the edit agent
+    cannot diverge on what "invalidate phase X" means.
 \end{description}
 
 % ===================== 5. Testing =====================

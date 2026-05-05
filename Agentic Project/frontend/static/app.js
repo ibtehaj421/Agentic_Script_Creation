@@ -1,1 +1,470 @@
-import{useEffect as S,useRef as R,useState as m}from"react";import{createRoot as J}from"react-dom/client";import{Fragment as x,jsx as e,jsxs as n}from"react/jsx-runtime";var g="",L=t=>`${location.protocol==="https:"?"wss":"ws"}://${location.host}/ws/progress/${t}`;function F({status:t}){return e("span",{className:`status-pill ${t}`,children:t})}function T({name:t,status:o}){return n("div",{className:"phase-row",children:[e("span",{className:"phase-name",children:t}),e(F,{status:o||"pending"})]})}function U({onSubmit:t,disabled:o}){let[a,l]=m("A young astronaut discovers a hidden ocean on Mars and uncovers an ancient intelligence."),[s,d]=m(3),[r,c]=m("cinematic");return n("div",{className:"form-block",children:[e("label",{children:"Prompt"}),e("textarea",{value:a,onChange:h=>l(h.target.value)}),n("div",{className:"row",children:[n("div",{children:[e("label",{children:"Scenes"}),e("input",{type:"number",min:"1",max:"8",value:s,onChange:h=>d(Number(h.target.value))})]}),n("div",{children:[e("label",{children:"Style"}),n("select",{value:r,onChange:h=>c(h.target.value),children:[e("option",{children:"cinematic"}),e("option",{children:"anime"}),e("option",{children:"noir"}),e("option",{children:"cyberpunk"}),e("option",{children:"photorealistic"}),e("option",{children:"watercolor"})]})]})]}),e("button",{className:"btn",disabled:o||!a.trim(),onClick:()=>t({prompt:a,num_scenes:s,style:r}),children:"\u25B6 Generate video"})]})}function M({currentJobId:t,onPick:o}){let[a,l]=m([]);return S(()=>{fetch(`${g}/api/jobs`).then(s=>s.ok?s.json():[]).then(l).catch(()=>l([]))},[t]),a.length?n("div",{className:"form-block",style:{marginTop:8},children:[e("label",{children:"Or resume a previous job"}),n("select",{value:t||"",onChange:s=>s.target.value&&o(s.target.value),children:[e("option",{value:"",children:"\u2014 pick one \u2014"}),a.map(s=>n("option",{value:s.job_id,children:[s.title||"(untitled)"," \xB7 ",s.job_id," \xB7 v",s.latest_version]},s.job_id))]})]}):null}function G({events:t}){let o=R(null);return S(()=>{o.current&&(o.current.scrollTop=o.current.scrollHeight)},[t]),e("div",{className:"events",ref:o,children:t.length===0?e("div",{style:{color:"var(--muted)"},children:"waiting for pipeline events\u2026"}):t.slice(-200).map((a,l)=>n("div",{children:[n("b",{children:["[",a.phase,"]"]})," ",a.event," ",a.data&&Object.keys(a.data).length?JSON.stringify(a.data).slice(0,120):""]},l))})}function W({outputs:t,bust:o=0}){return!t||!t.scenes?null:e("div",{className:"scene-grid",children:Object.entries(t.scenes).map(([a,l])=>n("div",{className:"scene-tile",children:[l.composed?e("video",{src:`${l.composed}?b=${o}`,controls:!0,muted:!0}):l.background?e("img",{src:`${l.background}?b=${o}`,alt:`scene ${a}`}):null,n("div",{className:"meta",children:["Scene ",a]})]},`${a}-${o}`))})}function D({outputs:t}){if(!t||!t.character_portraits)return null;let o=Object.entries(t.character_portraits);return o.length?e("div",{className:"chip-row",style:{gap:14},children:o.map(([a,l])=>n("div",{style:{textAlign:"center"},children:[e("img",{src:l,alt:a,style:{width:68,height:68,borderRadius:"50%",objectFit:"cover",border:"1px solid var(--border)"}}),e("div",{style:{fontSize:11,color:"var(--muted)",marginTop:4},children:a})]},a))}):null}function H(t,o){let a=new Map(t.map(r=>[r.version,r])),l=[],s=new Set,d=o;for(;d!=null&&!s.has(d);){l.push(d),s.add(d);let r=a.get(d);d=r&&r.parent_version!=null?r.parent_version:null}return l}function Q({jobId:t,versions:o,refresh:a,onUndo:l,onRestore:s}){if(!t)return e("div",{className:"empty",children:"Start a job to see versions."});let d=o.find(c=>c.is_active),r=d&&d.parent_version!=null;return n("div",{children:[n("div",{className:"row",style:{marginBottom:12},children:[e("button",{className:"btn small warn",onClick:l,disabled:!r,children:"\u21B6 Undo last"}),e("button",{className:"btn small secondary",onClick:a,children:"\u27F3"})]}),n("div",{className:"versions-list",children:[o.length===0&&e("div",{className:"empty",children:"no versions yet"}),o.slice().reverse().map(c=>{let h=!!c.is_active,w=H(o,c.version),y=w.length>1?`lineage: ${w.map(v=>"v"+v).join(" \u2192 ")}`:"root version";return n("div",{className:"version-row"+(h?" active":""),title:y,style:h?{borderColor:"var(--accent, #5b8def)",background:"rgba(91,141,239,0.08)"}:void 0,children:[n("div",{children:[n("div",{className:"v-num",children:["v",c.version,h&&e("span",{style:{color:"var(--accent, #5b8def)",marginLeft:6,fontSize:11},children:"\u25CF active"}),c.parent_version!=null&&n("span",{style:{color:"var(--muted)",marginLeft:6,fontSize:10},children:["\u2190 v",c.parent_version]})]}),n("div",{style:{fontSize:11,color:"var(--muted)"},children:["[",c.triggered_by,"] ",c.change_summary||c.changed_phase||"pipeline"]})]}),!h&&e("button",{className:"btn small secondary",onClick:()=>s(c.version),children:"Restore"})]},c.version)})]})]})}function q({jobId:t,busy:o,onEdit:a,chatLog:l}){let[s,d]=m("");return n("div",{children:[n("div",{className:"edit-chat",children:[l.length===0&&e("div",{className:"empty",children:'Try: "make scene 2 darker", "change voice to whispered", "apply cyberpunk filter"'}),l.map((r,c)=>e("div",{className:`edit-bubble ${r.role}`,children:r.role==="agent"&&r.intent?n(x,{children:[e("b",{children:r.intent.intent})," \u2192 target=",r.intent.target,", scope=",r.intent.scope||"global"," (conf=",r.intent.confidence?.toFixed(2),")",e("br",{}),r.message]}):r.text},c))]}),n("div",{style:{marginTop:12},children:[e("textarea",{value:s,onChange:r=>d(r.target.value),placeholder:"Describe your edit\u2026",disabled:!t||o}),e("div",{className:"row",style:{marginTop:6},children:e("button",{className:"btn small",disabled:!t||o||!s.trim(),onClick:()=>{a(s),d("")},children:"Send edit"})})]})]})}function K(){let[t,o]=m(()=>{try{return localStorage.getItem("agentic_jobId")}catch{return null}}),[a,l]=m([]),[s,d]=m(null),[r,c]=m(null),[h,w]=m([]),[y,v]=m(!1),[O,_]=m([]),z=R(null),[$,j]=m(0),I=R(null);S(()=>{try{t?localStorage.setItem("agentic_jobId",t):localStorage.removeItem("agentic_jobId")}catch{}},[t]),S(()=>{if($===0)return;let i=I.current;i&&(i.pause(),i.load())},[$]);let C=s?.phase_status||{story:"pending",audio:"pending",video:"pending"},N=async()=>{if(t)try{let[i,u,b]=await Promise.all([fetch(`${g}/api/state/${t}`).then(p=>p.ok?p.json():null),fetch(`${g}/api/outputs/${t}`).then(p=>p.ok?p.json():null),fetch(`${g}/api/versions/${t}`).then(p=>p.ok?p.json():[])]);i&&d(i),u&&c(u),w(b||[])}catch(i){console.error(i)}};S(()=>{if(!t)return;let i=new WebSocket(L(t));return i.onmessage=u=>{try{let b=JSON.parse(u.data);l(p=>[...p,b]),["scene_composed","phase_done","final_ready","applied","snapshot","job_complete"].includes(b.event)&&N(),b.event==="job_complete"&&v(!1)}catch(b){console.warn(b)}},i.onclose=()=>v(!1),z.current=i,()=>i.close()},[t]),S(()=>{N()},[t]);let A=async i=>{v(!0),l([]),_([]);let u=await fetch(`${g}/api/generate`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(i)}).then(b=>b.json());o(u.job_id)},V=async i=>{if(!t)return;v(!0),_(f=>[...f,{role:"user",text:i}]);let u=a.length;if(!(await fetch(`${g}/api/edit/${t}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:i})})).ok){_(f=>[...f,{role:"agent",text:"failed to submit edit"}]),v(!1);return}let p=setInterval(()=>{let f=a.slice(u).findLast?.(k=>k.event==="applied");f&&(clearInterval(p),_(k=>[...k,{role:"agent",intent:f.data.intent,message:f.data.message}]),j(k=>k+1),v(!1))},400);setTimeout(()=>clearInterval(p),18e4)},B=async()=>{t&&(v(!0),await fetch(`${g}/api/undo/${t}`,{method:"POST"}),await N(),j(i=>i+1),v(!1))},E=async i=>{t&&(v(!0),await fetch(`${g}/api/undo/${t}?to_version=${i}`,{method:"POST"}),await N(),j(u=>u+1),v(!1))},P=async i=>{t&&(v(!0),l([]),await fetch(`${g}/api/rerun/${i}/${t}`,{method:"POST"}))};return n("div",{className:"app",children:[n("aside",{className:"sidebar",children:[n("h1",{children:["\u{1F3AC} Agentic ",e("span",{children:"Video Studio"})]}),e("div",{style:{color:"var(--muted)",fontSize:12,marginBottom:14},children:"Prompt \u2192 Script \u2192 Audio \u2192 Video, with intelligent edits and undo."}),e("h2",{children:"1. Prompt"}),e(U,{onSubmit:A,disabled:y}),e(M,{currentJobId:t,onPick:o}),e("h2",{children:"2. Pipeline"}),n("div",{className:"card",children:[e(T,{name:"Story & Script",status:C.story}),e(T,{name:"Audio",status:C.audio}),e(T,{name:"Video",status:C.video}),n("div",{className:"row",style:{marginTop:12},children:[e("button",{className:"btn small secondary",disabled:!t||y,onClick:()=>P("story"),children:"Rerun story"}),e("button",{className:"btn small secondary",disabled:!t||y,onClick:()=>P("audio"),children:"Rerun audio"}),e("button",{className:"btn small secondary",disabled:!t||y,onClick:()=>P("video"),children:"Rerun video"})]})]}),e("h2",{children:"Live events"}),e(G,{events:a})]}),n("main",{className:"main",children:[e("h2",{children:"Final video"}),r?.final_mp4?e("video",{className:"video-player",ref:I,src:`${r.final_mp4}?b=${$}`,controls:!0}):e("div",{className:"video-player",style:{display:"flex",alignItems:"center",justifyContent:"center",color:"var(--muted)",fontSize:14},children:t?"rendering\u2026":"no video yet \u2014 start a generation from the sidebar."}),e("h2",{children:"Story & characters"}),e("div",{className:"card",children:s?.story?.title?n(x,{children:[e("h3",{style:{margin:0},children:s.story.title}),e("div",{style:{color:"var(--muted)",fontSize:13,marginBottom:10},children:s.story.logline}),e(D,{outputs:r})]}):e("div",{className:"empty",children:"no story yet"})}),e("h2",{children:"Scenes"}),e(W,{outputs:r,bust:$}),s?.story?.scenes?.length>0&&n("div",{className:"card",style:{marginTop:18},children:[e("h3",{style:{margin:"0 0 6px"},children:"Script preview"}),s.story.scenes.map(i=>n("div",{style:{padding:"8px 0",borderBottom:"1px dashed var(--border)"},children:[n("b",{children:["Scene ",i.scene_id," \xB7 ",i.location]}),e("div",{style:{fontSize:12,color:"var(--muted)",margin:"4px 0"},children:i.action}),e("div",{children:i.dialogue.map((u,b)=>n("div",{style:{fontSize:12},children:[n("span",{style:{color:"var(--accent)"},children:[u.speaker,":"]}),' "',u.line,'"',n("span",{style:{color:"var(--muted)"},children:[" \u2014 ",u.emotion]})]},b))})]},i.scene_id))]})]}),n("aside",{className:"right",children:[e("h2",{children:"Edit agent"}),e(q,{jobId:t,busy:y,onEdit:V,chatLog:O}),e("h2",{children:"Version history"}),e(Q,{jobId:t,versions:h,refresh:N,onUndo:B,onRestore:E})]})]})}var X=J(document.getElementById("root"));X.render(e(K,{}));
+// src/app.jsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { Fragment, jsx, jsxs } from "react/jsx-runtime";
+var API = "";
+var WS = (job) => {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  return `${proto}://${location.host}/ws/progress/${job}`;
+};
+function StatusPill({ status }) {
+  return /* @__PURE__ */ jsx("span", { className: `status-pill ${status}`, children: status });
+}
+function PhaseRow({ name, status }) {
+  return /* @__PURE__ */ jsxs("div", { className: "phase-row", children: [
+    /* @__PURE__ */ jsx("span", { className: "phase-name", children: name }),
+    /* @__PURE__ */ jsx(StatusPill, { status: status || "pending" })
+  ] });
+}
+function PromptForm({ onSubmit, disabled }) {
+  const [prompt, setPrompt] = useState("A young astronaut discovers a hidden ocean on Mars and uncovers an ancient intelligence.");
+  const [numScenes, setNumScenes] = useState(3);
+  const [style, setStyle] = useState("cinematic");
+  return /* @__PURE__ */ jsxs("div", { className: "form-block", children: [
+    /* @__PURE__ */ jsx("label", { children: "Prompt" }),
+    /* @__PURE__ */ jsx("textarea", { value: prompt, onChange: (e) => setPrompt(e.target.value) }),
+    /* @__PURE__ */ jsxs("div", { className: "row", children: [
+      /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx("label", { children: "Scenes" }),
+        /* @__PURE__ */ jsx(
+          "input",
+          {
+            type: "number",
+            min: "1",
+            max: "8",
+            value: numScenes,
+            onChange: (e) => setNumScenes(Number(e.target.value))
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx("label", { children: "Style" }),
+        /* @__PURE__ */ jsxs("select", { value: style, onChange: (e) => setStyle(e.target.value), children: [
+          /* @__PURE__ */ jsx("option", { children: "cinematic" }),
+          /* @__PURE__ */ jsx("option", { children: "anime" }),
+          /* @__PURE__ */ jsx("option", { children: "noir" }),
+          /* @__PURE__ */ jsx("option", { children: "cyberpunk" }),
+          /* @__PURE__ */ jsx("option", { children: "photorealistic" }),
+          /* @__PURE__ */ jsx("option", { children: "watercolor" })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsx(
+      "button",
+      {
+        className: "btn",
+        disabled: disabled || !prompt.trim(),
+        onClick: () => onSubmit({ prompt, num_scenes: numScenes, style }),
+        children: "\u25B6 Generate video"
+      }
+    )
+  ] });
+}
+function JobResumePicker({ currentJobId, onPick }) {
+  const [jobs, setJobs] = useState([]);
+  useEffect(() => {
+    fetch(`${API}/api/jobs`).then((r) => r.ok ? r.json() : []).then(setJobs).catch(() => setJobs([]));
+  }, [currentJobId]);
+  if (!jobs.length) return null;
+  return /* @__PURE__ */ jsxs("div", { className: "form-block", style: { marginTop: 8 }, children: [
+    /* @__PURE__ */ jsx("label", { children: "Or resume a previous job" }),
+    /* @__PURE__ */ jsxs(
+      "select",
+      {
+        value: currentJobId || "",
+        onChange: (e) => e.target.value && onPick(e.target.value),
+        children: [
+          /* @__PURE__ */ jsx("option", { value: "", children: "\u2014 pick one \u2014" }),
+          jobs.map((j) => /* @__PURE__ */ jsxs("option", { value: j.job_id, children: [
+            j.title || "(untitled)",
+            " \xB7 ",
+            j.job_id,
+            " \xB7 v",
+            j.latest_version
+          ] }, j.job_id))
+        ]
+      }
+    )
+  ] });
+}
+function EventStream({ events }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+  }, [events]);
+  return /* @__PURE__ */ jsx("div", { className: "events", ref, children: events.length === 0 ? /* @__PURE__ */ jsx("div", { style: { color: "var(--muted)" }, children: "waiting for pipeline events\u2026" }) : events.slice(-200).map((e, i) => /* @__PURE__ */ jsxs("div", { children: [
+    /* @__PURE__ */ jsxs("b", { children: [
+      "[",
+      e.phase,
+      "]"
+    ] }),
+    " ",
+    e.event,
+    " ",
+    e.data && Object.keys(e.data).length ? JSON.stringify(e.data).slice(0, 120) : ""
+  ] }, i)) });
+}
+function Scenes({ outputs, bust = 0 }) {
+  if (!outputs || !outputs.scenes) return null;
+  return /* @__PURE__ */ jsx("div", { className: "scene-grid", children: Object.entries(outputs.scenes).map(([id, s]) => (
+    // `key` includes bust so an explicit edit / undo / restore
+    // remounts the tile (forcing a fresh fetch). Bust only changes
+    // on user actions, so this doesn't loop.
+    /* @__PURE__ */ jsxs("div", { className: "scene-tile", children: [
+      s.composed ? /* @__PURE__ */ jsx("video", { src: `${s.composed}?b=${bust}`, controls: true, muted: true }) : s.background ? /* @__PURE__ */ jsx("img", { src: `${s.background}?b=${bust}`, alt: `scene ${id}` }) : null,
+      /* @__PURE__ */ jsxs("div", { className: "meta", children: [
+        "Scene ",
+        id
+      ] })
+    ] }, `${id}-${bust}`)
+  )) });
+}
+function CharactersRow({ outputs }) {
+  if (!outputs || !outputs.character_portraits) return null;
+  const entries = Object.entries(outputs.character_portraits);
+  if (!entries.length) return null;
+  return /* @__PURE__ */ jsx("div", { className: "chip-row", style: { gap: 14 }, children: entries.map(([name, path]) => /* @__PURE__ */ jsxs("div", { style: { textAlign: "center" }, children: [
+    /* @__PURE__ */ jsx("img", { src: path, alt: name, style: { width: 68, height: 68, borderRadius: "50%", objectFit: "cover", border: "1px solid var(--border)" } }),
+    /* @__PURE__ */ jsx("div", { style: { fontSize: 11, color: "var(--muted)", marginTop: 4 }, children: name })
+  ] }, name)) });
+}
+function _lineage(versions, target) {
+  const byVer = new Map(versions.map((v) => [v.version, v]));
+  const chain = [];
+  const seen = /* @__PURE__ */ new Set();
+  let cur = target;
+  while (cur != null && !seen.has(cur)) {
+    chain.push(cur);
+    seen.add(cur);
+    const row = byVer.get(cur);
+    cur = row && row.parent_version != null ? row.parent_version : null;
+  }
+  return chain;
+}
+function VersionPanel({ jobId, versions, refresh, onUndo, onRestore }) {
+  if (!jobId) return /* @__PURE__ */ jsx("div", { className: "empty", children: "Start a job to see versions." });
+  const active = versions.find((v) => v.is_active);
+  const canUndo = active && active.parent_version != null;
+  return /* @__PURE__ */ jsxs("div", { children: [
+    /* @__PURE__ */ jsxs("div", { className: "row", style: { marginBottom: 12 }, children: [
+      /* @__PURE__ */ jsx("button", { className: "btn small warn", onClick: onUndo, disabled: !canUndo, children: "\u21B6 Undo last" }),
+      /* @__PURE__ */ jsx("button", { className: "btn small secondary", onClick: refresh, children: "\u27F3" })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "versions-list", children: [
+      versions.length === 0 && /* @__PURE__ */ jsx("div", { className: "empty", children: "no versions yet" }),
+      versions.slice().reverse().map((v) => {
+        const isActive = !!v.is_active;
+        const chain = _lineage(versions, v.version);
+        const lineageText = chain.length > 1 ? `lineage: ${chain.map((n) => "v" + n).join(" \u2192 ")}` : `root version`;
+        return /* @__PURE__ */ jsxs(
+          "div",
+          {
+            className: "version-row" + (isActive ? " active" : ""),
+            title: lineageText,
+            style: isActive ? {
+              borderColor: "var(--accent, #5b8def)",
+              background: "rgba(91,141,239,0.08)"
+            } : void 0,
+            children: [
+              /* @__PURE__ */ jsxs("div", { children: [
+                /* @__PURE__ */ jsxs("div", { className: "v-num", children: [
+                  "v",
+                  v.version,
+                  isActive && /* @__PURE__ */ jsx("span", { style: { color: "var(--accent, #5b8def)", marginLeft: 6, fontSize: 11 }, children: "\u25CF active" }),
+                  v.parent_version != null && /* @__PURE__ */ jsxs("span", { style: { color: "var(--muted)", marginLeft: 6, fontSize: 10 }, children: [
+                    "\u2190 v",
+                    v.parent_version
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxs("div", { style: { fontSize: 11, color: "var(--muted)" }, children: [
+                  "[",
+                  v.triggered_by,
+                  "] ",
+                  v.change_summary || v.changed_phase || "pipeline"
+                ] })
+              ] }),
+              !isActive && /* @__PURE__ */ jsx("button", { className: "btn small secondary", onClick: () => onRestore(v.version), children: "Restore" })
+            ]
+          },
+          v.version
+        );
+      })
+    ] })
+  ] });
+}
+function EditPanel({ jobId, busy, onEdit, chatLog }) {
+  const [q, setQ] = useState("");
+  return /* @__PURE__ */ jsxs("div", { children: [
+    /* @__PURE__ */ jsxs("div", { className: "edit-chat", children: [
+      chatLog.length === 0 && /* @__PURE__ */ jsx("div", { className: "empty", children: 'Try: "make scene 2 darker", "change voice to whispered", "apply cyberpunk filter"' }),
+      chatLog.map((m, i) => /* @__PURE__ */ jsx("div", { className: `edit-bubble ${m.role}`, children: m.role === "agent" && m.intent ? /* @__PURE__ */ jsxs(Fragment, { children: [
+        /* @__PURE__ */ jsx("b", { children: m.intent.intent }),
+        " \u2192 target=",
+        m.intent.target,
+        ", scope=",
+        m.intent.scope || "global",
+        " (conf=",
+        m.intent.confidence?.toFixed(2),
+        ")",
+        /* @__PURE__ */ jsx("br", {}),
+        m.message
+      ] }) : m.text }, i))
+    ] }),
+    /* @__PURE__ */ jsxs("div", { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ jsx(
+        "textarea",
+        {
+          value: q,
+          onChange: (e) => setQ(e.target.value),
+          placeholder: "Describe your edit\u2026",
+          disabled: !jobId || busy
+        }
+      ),
+      /* @__PURE__ */ jsx("div", { className: "row", style: { marginTop: 6 }, children: /* @__PURE__ */ jsx(
+        "button",
+        {
+          className: "btn small",
+          disabled: !jobId || busy || !q.trim(),
+          onClick: () => {
+            onEdit(q);
+            setQ("");
+          },
+          children: "Send edit"
+        }
+      ) })
+    ] })
+  ] });
+}
+function App() {
+  const [jobId, setJobId] = useState(() => {
+    try {
+      return localStorage.getItem("agentic_jobId");
+    } catch {
+      return null;
+    }
+  });
+  const [events, setEvents] = useState([]);
+  const [state, setState] = useState(null);
+  const [outputs, setOutputs] = useState(null);
+  const [versions, setVersions] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [chatLog, setChatLog] = useState([]);
+  const wsRef = useRef(null);
+  const [videoBust, setVideoBust] = useState(0);
+  const finalVideoRef = useRef(null);
+  useEffect(() => {
+    try {
+      if (jobId) localStorage.setItem("agentic_jobId", jobId);
+      else localStorage.removeItem("agentic_jobId");
+    } catch {
+    }
+  }, [jobId]);
+  useEffect(() => {
+    if (videoBust === 0) return;
+    const v = finalVideoRef.current;
+    if (v) {
+      v.pause();
+      v.load();
+    }
+  }, [videoBust]);
+  const phaseStatuses = state?.phase_status || {
+    story: "pending",
+    audio: "pending",
+    video: "pending"
+  };
+  const refreshAll = async () => {
+    if (!jobId) return;
+    try {
+      const [s, o, v] = await Promise.all([
+        fetch(`${API}/api/state/${jobId}`).then((r) => r.ok ? r.json() : null),
+        fetch(`${API}/api/outputs/${jobId}`).then((r) => r.ok ? r.json() : null),
+        fetch(`${API}/api/versions/${jobId}`).then((r) => r.ok ? r.json() : [])
+      ]);
+      if (s) setState(s);
+      if (o) setOutputs(o);
+      setVersions(v || []);
+      const active = (v || []).find((row) => row.is_active);
+      if (active && active.version != null) {
+        setVideoBust((prev) => prev === active.version ? prev : active.version);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+  useEffect(() => {
+    if (!jobId) return;
+    const ws = new WebSocket(WS(jobId));
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        setEvents((prev) => [...prev, msg]);
+        if (["scene_composed", "phase_done", "final_ready", "applied", "snapshot", "job_complete"].includes(msg.event)) {
+          refreshAll();
+        }
+        if (msg.event === "job_complete") setBusy(false);
+      } catch (e) {
+        console.warn(e);
+      }
+    };
+    ws.onclose = () => setBusy(false);
+    wsRef.current = ws;
+    return () => ws.close();
+  }, [jobId]);
+  useEffect(() => {
+    refreshAll();
+  }, [jobId]);
+  const handleGenerate = async (req) => {
+    setBusy(true);
+    setEvents([]);
+    setChatLog([]);
+    const r = await fetch(`${API}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req)
+    }).then((x) => x.json());
+    setJobId(r.job_id);
+  };
+  const handleEdit = async (query) => {
+    if (!jobId) return;
+    setBusy(true);
+    setChatLog((l) => [...l, { role: "user", text: query }]);
+    const before = events.length;
+    const r = await fetch(`${API}/api/edit/${jobId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query })
+    });
+    if (!r.ok) {
+      setChatLog((l) => [...l, { role: "agent", text: "failed to submit edit" }]);
+      setBusy(false);
+      return;
+    }
+    const check = setInterval(() => {
+      const applied = events.slice(before).findLast?.((e) => e.event === "applied");
+      if (applied) {
+        clearInterval(check);
+        setChatLog((l) => [...l, { role: "agent", intent: applied.data.intent, message: applied.data.message }]);
+        setVideoBust((n) => n + 1);
+        setBusy(false);
+      }
+    }, 400);
+    setTimeout(() => clearInterval(check), 18e4);
+  };
+  const handleUndo = async () => {
+    if (!jobId) return;
+    setBusy(true);
+    await fetch(`${API}/api/undo/${jobId}`, { method: "POST" });
+    await refreshAll();
+    setVideoBust((n) => n + 1);
+    setBusy(false);
+  };
+  const handleRestore = async (version) => {
+    if (!jobId) return;
+    setBusy(true);
+    await fetch(`${API}/api/undo/${jobId}?to_version=${version}`, { method: "POST" });
+    await refreshAll();
+    setVideoBust((n) => n + 1);
+    setBusy(false);
+  };
+  const handleRerun = async (phase) => {
+    if (!jobId) return;
+    setBusy(true);
+    setEvents([]);
+    await fetch(`${API}/api/rerun/${phase}/${jobId}`, { method: "POST" });
+  };
+  return /* @__PURE__ */ jsxs("div", { className: "app", children: [
+    /* @__PURE__ */ jsxs("aside", { className: "sidebar", children: [
+      /* @__PURE__ */ jsxs("h1", { children: [
+        "\u{1F3AC} Agentic ",
+        /* @__PURE__ */ jsx("span", { children: "Video Studio" })
+      ] }),
+      /* @__PURE__ */ jsx("div", { style: { color: "var(--muted)", fontSize: 12, marginBottom: 14 }, children: "Prompt \u2192 Script \u2192 Audio \u2192 Video, with intelligent edits and undo." }),
+      /* @__PURE__ */ jsx("h2", { children: "1. Prompt" }),
+      /* @__PURE__ */ jsx(PromptForm, { onSubmit: handleGenerate, disabled: busy }),
+      /* @__PURE__ */ jsx(JobResumePicker, { currentJobId: jobId, onPick: setJobId }),
+      /* @__PURE__ */ jsx("h2", { children: "2. Pipeline" }),
+      /* @__PURE__ */ jsxs("div", { className: "card", children: [
+        /* @__PURE__ */ jsx(PhaseRow, { name: "Story & Script", status: phaseStatuses.story }),
+        /* @__PURE__ */ jsx(PhaseRow, { name: "Audio", status: phaseStatuses.audio }),
+        /* @__PURE__ */ jsx(PhaseRow, { name: "Video", status: phaseStatuses.video }),
+        /* @__PURE__ */ jsxs("div", { className: "row", style: { marginTop: 12 }, children: [
+          /* @__PURE__ */ jsx("button", { className: "btn small secondary", disabled: !jobId || busy, onClick: () => handleRerun("story"), children: "Rerun story" }),
+          /* @__PURE__ */ jsx("button", { className: "btn small secondary", disabled: !jobId || busy, onClick: () => handleRerun("audio"), children: "Rerun audio" }),
+          /* @__PURE__ */ jsx("button", { className: "btn small secondary", disabled: !jobId || busy, onClick: () => handleRerun("video"), children: "Rerun video" })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsx("h2", { children: "Live events" }),
+      /* @__PURE__ */ jsx(EventStream, { events })
+    ] }),
+    /* @__PURE__ */ jsxs("main", { className: "main", children: [
+      /* @__PURE__ */ jsx("h2", { children: "Final video" }),
+      outputs?.final_mp4 ? (
+        // `?b=<videoBust>` cache-busts ONLY when the user makes an edit
+        // / undo / restore (videoBust is bumped manually in those
+        // handlers, never on incidental re-renders). Combined with the
+        // useEffect below calling .load(), the player drops its cached
+        // MP4 and re-fetches, but without remounting the element — so
+        // no NS_BINDING_ABORTED loops.
+        /* @__PURE__ */ jsx(
+          "video",
+          {
+            className: "video-player",
+            ref: finalVideoRef,
+            src: `${outputs.final_mp4}?b=${videoBust}`,
+            controls: true
+          }
+        )
+      ) : /* @__PURE__ */ jsx("div", { className: "video-player", style: { display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: 14 }, children: jobId ? "rendering\u2026" : "no video yet \u2014 start a generation from the sidebar." }),
+      /* @__PURE__ */ jsx("h2", { children: "Story & characters" }),
+      /* @__PURE__ */ jsx("div", { className: "card", children: state?.story?.title ? /* @__PURE__ */ jsxs(Fragment, { children: [
+        /* @__PURE__ */ jsx("h3", { style: { margin: 0 }, children: state.story.title }),
+        /* @__PURE__ */ jsx("div", { style: { color: "var(--muted)", fontSize: 13, marginBottom: 10 }, children: state.story.logline }),
+        /* @__PURE__ */ jsx(CharactersRow, { outputs })
+      ] }) : /* @__PURE__ */ jsx("div", { className: "empty", children: "no story yet" }) }),
+      /* @__PURE__ */ jsx("h2", { children: "Scenes" }),
+      /* @__PURE__ */ jsx(Scenes, { outputs, bust: videoBust }),
+      state?.story?.scenes?.length > 0 && /* @__PURE__ */ jsxs("div", { className: "card", style: { marginTop: 18 }, children: [
+        /* @__PURE__ */ jsx("h3", { style: { margin: "0 0 6px" }, children: "Script preview" }),
+        state.story.scenes.map((s) => /* @__PURE__ */ jsxs("div", { style: { padding: "8px 0", borderBottom: "1px dashed var(--border)" }, children: [
+          /* @__PURE__ */ jsxs("b", { children: [
+            "Scene ",
+            s.scene_id,
+            " \xB7 ",
+            s.location
+          ] }),
+          /* @__PURE__ */ jsx("div", { style: { fontSize: 12, color: "var(--muted)", margin: "4px 0" }, children: s.action }),
+          /* @__PURE__ */ jsx("div", { children: s.dialogue.map((d, i) => /* @__PURE__ */ jsxs("div", { style: { fontSize: 12 }, children: [
+            /* @__PURE__ */ jsxs("span", { style: { color: "var(--accent)" }, children: [
+              d.speaker,
+              ":"
+            ] }),
+            ' "',
+            d.line,
+            '"',
+            /* @__PURE__ */ jsxs("span", { style: { color: "var(--muted)" }, children: [
+              " \u2014 ",
+              d.emotion
+            ] })
+          ] }, i)) })
+        ] }, s.scene_id))
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxs("aside", { className: "right", children: [
+      /* @__PURE__ */ jsx("h2", { children: "Edit agent" }),
+      /* @__PURE__ */ jsx(EditPanel, { jobId, busy, onEdit: handleEdit, chatLog }),
+      /* @__PURE__ */ jsx("h2", { children: "Version history" }),
+      /* @__PURE__ */ jsx(
+        VersionPanel,
+        {
+          jobId,
+          versions,
+          refresh: refreshAll,
+          onUndo: handleUndo,
+          onRestore: handleRestore
+        }
+      )
+    ] })
+  ] });
+}
+var root = createRoot(document.getElementById("root"));
+root.render(/* @__PURE__ */ jsx(App, {}));

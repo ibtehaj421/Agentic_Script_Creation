@@ -141,12 +141,36 @@ def _build_scene_clip(state: PipelineState, scene, ex: ToolExecutor, job_id: str
         speaker_portrait = _portrait_for(state, line.speaker)
         visual = speaker_portrait or clip.background_path
 
-        kb_clip = ex.execute(
-            "ken_burns",
-            image_path=visual,
-            duration_s=line_dur,
-            direction=_KB_DIRECTIONS[(scene.scene_id + line_idx) % len(_KB_DIRECTIONS)],
-        )
+        # Mouth-region lip-sync close-up: native-resolution portrait
+        # everywhere except the small mouth ellipse, which is wav2lip's
+        # synthesized lip motion. Avoids the whole-frame softness bare
+        # wav2lip causes (its 96×96 internal face patch). Falls back to
+        # plain ken-burns if face/mouth detection fails or wav2lip can't
+        # process the audio (NaN mel from silence, etc.) so one bad line
+        # never kills the render.
+        kb_clip = None
+        if speaker_portrait:
+            try:
+                kb_clip = ex.execute(
+                    "mouth_blend_clip",
+                    image_path=speaker_portrait,
+                    audio_path=seg_path,
+                    duration_s=line_dur,
+                )
+            except Exception as e:
+                emit(
+                    job_id, "video", "wav2lip_failed",
+                    {"scene_id": scene.scene_id, "line_idx": line_idx,
+                     "speaker": line.speaker, "err": str(e)},
+                )
+                kb_clip = None
+        if not kb_clip:
+            kb_clip = ex.execute(
+                "ken_burns",
+                image_path=visual,
+                duration_s=line_dur,
+                direction=_KB_DIRECTIONS[(scene.scene_id + line_idx) % len(_KB_DIRECTIONS)],
+            )
 
         line_mp4 = ex.execute(
             "compose_scene",
